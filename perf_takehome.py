@@ -195,7 +195,9 @@ class IR:
     def const(self,x):
         a=self.new(1)
         if not hasattr(self,'const_zero'):
-            self.const_zero=self.new(1); self.emit('load',('const',self.const_zero,0),[],[self.const_zero])
+            # Scratch begins at zero; physical word 0 stays immutable.
+            self.const_zero=self.new(1)
+        if x==0: return self.const_zero
         self.emit('constflex',('const',a,x),[self.const_zero],[a])
         self.nodes[-1].append(('add_imm',a,self.const_zero,x))
         return a
@@ -320,6 +322,13 @@ class IR:
                     pending[j]-=1
                     if not pending[j]: heapq.heappush(ready[n[j][0]],(score(j),j))
         assert not any(pending)
+        # Pause at an unused FLOW slot before any output values are written.
+        # This preserves the original reference harness's initial yield; the
+        # submission harness ignores pauses, so no extra cycle is needed.
+        pause_cycle=next(c for c,b in enumerate(ins) if 'lookup_target' not in b and not b.get('flow'))
+        first_output_cycle=min(c for c,used in enumerate(usage) if any(n[i][0]=='store' and n[i][5] is not None for i in used))
+        assert pause_cycle<first_output_cycle
+        ins[pause_cycle]['flow']=[('pause',)]
         start={}; end={}
         for cyc,used in enumerate(usage):
             for i in used:
@@ -327,7 +336,7 @@ class IR:
                     b=self.owner[a]; start[b]=min(cyc,start.get(b,cyc)); end[b]=max(cyc,end.get(b,cyc))
                 for a in n[i][6]:
                     b=self.owner[a]; end[b]=max(cyc,end.get(b,cyc))
-        allocations={}; active=[]; free=[(0,100000)]; peak=0
+        allocations={}; active=[]; free=[(1,100000)]; peak=0
         def putfree(a,w):
             free.append((a,w)); free.sort(); merged=[]
             for p,s in free:
@@ -344,7 +353,9 @@ class IR:
                 pos=next(j for j,(p,l) in enumerate(free) if l>=w); p,l=free.pop(pos)
                 if l>w: free.insert(pos,(p+w,l-w))
                 allocations[a]=p; peak=max(peak,p+w); heapq.heappush(active,(end[a],a))
-        def physical(a): return allocations[self.owner[a]]+a-self.owner[a]
+        def physical(a):
+            if a==self.const_zero: return 0
+            return allocations[self.owner[a]]+a-self.owner[a]
         output=[]
         for b in ins:
             out={}
@@ -562,10 +573,6 @@ class KernelBuilder:
                 ir.store(sc(7+n_nodes+batch_size+8*g),dest)
         self.instrs,self.scratch_ptr,self.counts=ir.compile(); self.schedule_cycles=ir.logical_cycles
         if self.scratch_ptr>1536: raise RuntimeError('scratch peak '+str(self.scratch_ptr))
-        # Match the reference harness's initial yield without adding a cycle.
-        # The frozen submission simulator ignores pause instructions.
-        assert 'flow' not in self.instrs[0]
-        self.instrs[0]['flow'] = [('pause',)]
 
 
 
