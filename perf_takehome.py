@@ -204,23 +204,51 @@ class IR:
         return a
     def broadcast(self,a):
         d=self.new(); self.emit('valu',('vbroadcast',d,a),[a],range(d,d+8)); return d
+    def memory_broadcast(self,a,pointers):
+        """Broadcast through one of the existing anchor staging regions.
+
+        The builder emits all such calls before walk construction. The shared
+        stage_last map orders every write after its preceding pack read and
+        orders subsequent native-record stores after this pack read.
+        """
+        inherited=list(getattr(self,'extra_deps',[])); ctx=self.context
+        self.context=None
+        key=tuple(pointers); previous=getattr(self,'stage_last',{}).get(key)
+        self.extra_deps=inherited+([previous] if previous is not None else [])
+        stores=[]
+        for pointer in pointers:
+            self.emit('store',('store',pointer,a),[pointer,a],[])
+            stores.append(len(self.nodes)-1)
+        self.extra_deps=inherited+stores
+        out=self.load(pointers[0])
+        if not hasattr(self,'stage_last'): self.stage_last={}
+        self.stage_last[key]=self.last[out]
+        self.extra_deps=inherited; self.context=ctx
+        return out
     def bootstrap_pair_mask(self,pattern,a,zero):
-        for k in range(1,9):
-            src=a if k%2==0 else zero
-            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',('+',pattern+k,src,zero),[src,zero],[pattern+k])
+        # The owner is reserved from program start. Odd mask words retain the
+        # machine's initial zero; only the four selected even words are live.
+        assert self.owner[pattern] in self.fixed
+        for k in (2,4,6):
+            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',
+                      ('+',pattern+k,a,zero),[a,zero],[pattern+k])
         out=self.new()
-        self.emit('flow',('vselect',out,pattern,pattern,pattern+1),range(pattern,pattern+9),range(out,out+8))
+        self.emit('flow',('vselect',out,pattern,pattern,pattern-1),
+                  range(pattern,pattern+8),range(out,out+8))
         self.pair_mask=pattern
         return out
     def pair_broadcast(self,pattern):
         zero=self.const_zero
-        for k in range(2,9):
+        for k in range(2,8):
             src=pattern+k%2
-            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',('+',pattern+k,src,zero),[src,zero],[pattern+k])
+            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',
+                      ('+',pattern+k,src,zero),[src,zero],[pattern+k])
         a=self.new(); b=self.new()
-        reads=list(range(pattern,pattern+9))+list(range(self.pair_mask,self.pair_mask+8))
-        self.emit('flow',('vselect',a,self.pair_mask,pattern,pattern+1),reads,range(a,a+8))
-        self.emit('flow',('vselect',b,self.pair_mask,pattern+1,pattern),reads,range(b,b+8))
+        mask_reads=list(range(self.pair_mask,self.pair_mask+8))
+        self.emit('flow',('vselect',a,self.pair_mask,pattern,pattern-1),
+                  mask_reads+list(range(pattern,pattern+8,2)),range(a,a+8))
+        self.emit('flow',('vselect',b,self.pair_mask,pattern+1,pattern),
+                  mask_reads+list(range(pattern+1,pattern+8,2)),range(b,b+8))
         return a,b
     def op(self,op,*src,e='flex'):
         d=self.new(); self.emit(e,(op,d,*src),[a+k for a in src for k in range(8)],range(d,d+8)); return d
@@ -412,11 +440,11 @@ class IR:
                         if result in wanted: recipes[result].append((op,a,b,ia,ib))
         completed=[False]*len(n)
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else 1)+max([n[j][4] for j in n[i][3]] or [0])
-        bias=float(os.getenv('GROUP_BIAS', '5.75')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.75')); toff=float(os.getenv('TAIL_OFFSET', '170'))
-        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{"13": -4, "7": 2, "6": -4, "1": 8, "14": -4, "8": -8}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{"8": 16, "19": 4, "22": 8}')).items()}
+        bias=float(os.getenv('GROUP_BIAS', '5.25')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.5')); toff=float(os.getenv('TAIL_OFFSET', '120'))
+        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{"15": 16, "4": 2, "10": -8, "5": 4, "8": 4, "12": 4}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{}')).items()}
         def score(i):
             ctx=n[i][5]
-            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-150'))
+            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-100'))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record','pairalu']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
@@ -503,14 +531,23 @@ class IR:
         first_output_cycle=min(c for c,used in enumerate(usage) if any(n[i][0]=='store' and n[i][5] is not None for i in used))
         assert pause_cycle<first_output_cycle
         ins[pause_cycle]['flow']=[('pause',)]
-        start={}; end={}
+        start={}; end={}; word_end={}
+        split_lifetimes=os.getenv("SPLIT_LIFETIMES","1")=="1"
         for cyc,used in enumerate(usage):
             for i in used:
                 for a in n[i][7]:
-                    b=self.owner[a]; start[b]=min(cyc,start.get(b,cyc)); end[b]=max(cyc,end.get(b,cyc))
+                    b=self.owner[a]; start[b]=min(cyc,start.get(b,cyc)); end[b]=max(cyc,end.get(b,cyc)); word_end[a]=max(cyc+1,word_end.get(a,0))
                 for a in n[i][6]:
-                    b=self.owner[a]; end[b]=max(cyc,end.get(b,cyc))
-        allocations={}; active=[]; free=[(1,100000)]; peak=0
+                    b=self.owner[a]; end[b]=max(cyc,end.get(b,cyc)); word_end[a]=max(cyc,word_end.get(a,0))
+        # Fixed owners are reserved before cycle zero, so unwritten words in
+        # them may rely on initial scratch zero. Never recycle their storage.
+        fixed=getattr(self,'fixed',{})
+        allocations=dict(fixed); active=[]; free=[]; cursor=1
+        for a,p in sorted(fixed.items(),key=lambda item:item[1]):
+            assert p>=cursor,(a,p,cursor)
+            if p>cursor: free.append((cursor,p-cursor))
+            cursor=p+self.width[a]
+        free.append((cursor,100001-cursor)); peak=cursor if fixed else 0
         def putfree(a,w):
             free.append((a,w)); free.sort(); merged=[]
             for p,s in free:
@@ -518,15 +555,28 @@ class IR:
                 else: merged.append((p,s))
             free[:]=merged
         by_start=defaultdict(list)
-        for a,cyc in start.items(): by_start[cyc].append(a)
+        for a,cyc in start.items():
+            if a not in fixed: by_start[cyc].append(a)
         for cyc in range(len(ins)):
             while active and active[0][0]<=cyc:
-                _,a=heapq.heappop(active); putfree(allocations[a],self.width[a])
-            for a in sorted(by_start[cyc],key=lambda a:-self.width[a]):
+                _,address,width=heapq.heappop(active); putfree(address,width)
+            order=os.getenv('ALLOC_ORDER', 'short')
+            def order_key(a):
+                if order=='long': return (-self.width[a],-end[a],a)
+                if order=='short': return (-self.width[a],end[a],a)
+                if order=='end': return (-end[a],-self.width[a],a)
+                return (-self.width[a],a)
+            for a in sorted(by_start[cyc],key=order_key):
                 w=self.width[a]
-                pos=next(j for j,(p,l) in enumerate(free) if l>=w); p,l=free.pop(pos)
+                if os.getenv('ALLOC_POLICY','first')=='best':
+                    pos=min((j for j,(p,l) in enumerate(free) if l>=w),key=lambda j:(free[j][1],free[j][0]))
+                else: pos=next(j for j,(p,l) in enumerate(free) if l>=w)
+                p,l=free.pop(pos)
                 if l>w: free.insert(pos,(p+w,l-w))
-                allocations[a]=p; peak=max(peak,p+w); heapq.heappush(active,(end[a],a))
+                allocations[a]=p; peak=max(peak,p+w)
+                if split_lifetimes:
+                    for k in range(w): heapq.heappush(active,(word_end.get(a+k,cyc+1),p+k,1))
+                else: heapq.heappush(active,(end[a],p,w))
         def physical(a):
             if a==self.const_zero: return 0
             return allocations[self.owner[a]]+a-self.owner[a]
@@ -589,13 +639,24 @@ class KernelBuilder:
         scalars = {}
         vectors = {}
         pair_values=[(33,16896),(0xaccf6200,0xfd7046c5),(4097,0x7ed55d16),(19,0xc761c23c),(0xe9f8cc1d,9),(16,0xb55a4f09),(3,4),(0xfffffffe,-40),(-60,2430),(2310,1030),(1032,1029)]
+        mem_names=('c5','x0','x1','y0','y1','v0','v1','d00','d01','d10','d11','node1','node2','node3','node4','node5','node6')
+        mem_constants=(0xb55a4f09,-60,-40,2310,2430,4,16,1031,1032,1029,1030)
+        mem_bits=int(os.getenv('MEM_BCAST_MASK', '75456'),0)
+        mem_values={x&0xffffffff for j,x in enumerate(mem_constants) if mem_bits>>j&1}
         pair_bits=int(os.getenv('PAIR_MASK', '256'),0)
+        for j,pair in enumerate(pair_values):
+            if any((x&0xffffffff) in mem_values for x in pair): pair_bits &= ~(1<<j)
+        nbuf=int(os.getenv('ANCHOR_BUFFERS', '4'))
+        staging=None
+        mem_broadcast_count=0
         pair_map={}; destinations={}
         if pair_bits:
-            mask_pattern=ir.new(9); destinations[2]=mask_pattern
+            mask_owner=ir.new(9); mask_pattern=mask_owner+1
+            ir.fixed={mask_owner:1}
+            destinations[2]=mask_pattern
             for j,pair in enumerate(pair_values):
                 if not(pair_bits>>j&1):continue
-                a,b=(v&0xffffffff for v in pair); pattern=ir.new(9)
+                a,b=(v&0xffffffff for v in pair); pattern=ir.new(10)+1
                 pair_map[a]=pair_map[b]=(a,b,pattern)
                 destinations[a]=pattern; destinations[b]=pattern+1
 
@@ -609,10 +670,29 @@ class KernelBuilder:
                 else: scalars[x] = ir.const(x)
             return scalars[x]
 
+        def get_staging():
+            nonlocal staging
+            if staging is None:
+                ctx=ir.context; ir.context=None
+                staging=[[sc(2054+8*j+k) for k in range(8)] for j in range(nbuf)]
+                ir.context=ctx
+            return staging
+
+        def memory_broadcast(a):
+            nonlocal mem_broadcast_count
+            buffers=get_staging()
+            rotation=int(os.getenv('MEM_BCAST_ROTATION', '5'))
+            step=int(os.getenv('MEM_BCAST_STEP', '3'))
+            pointers=buffers[(rotation+step*mem_broadcast_count)%nbuf]
+            mem_broadcast_count+=1
+            return ir.memory_broadcast(a,pointers)
+
         def vc(x):
             x &= 0xffffffff
             if x not in vectors:
-                if pair_bits and x==2:
+                if x in mem_values:
+                    vectors[x]=memory_broadcast(sc(x))
+                elif pair_bits and x==2:
                     vectors[x]=ir.bootstrap_pair_mask(mask_pattern,sc(x),sc(0))
                 elif x in pair_map:
                     a,b,pattern=pair_map[x]; sc(a); sc(b)
@@ -694,7 +774,7 @@ class KernelBuilder:
                     scalars[value] = dest
 
         raw = ir.load(sc(7))
-        root_mask=int(os.getenv('ROOT_SCALAR', '0'))
+        root_mask=int(os.getenv('ROOT_SCALAR','0'))
         root_original = raw if root_mask&1 else ir.broadcast(raw)
         original_reads = [ir.last[raw]]
         source = {k: raw+k for k in range(7)}
@@ -706,7 +786,9 @@ class KernelBuilder:
         tree = []
         for k in range(7):
             enc = ir.scalar('^', source[k], sc(0xb55a4f09))
-            tree.append(enc if k==0 and root_mask&2 else ir.broadcast(enc))
+            if 1<=k<=6 and mem_bits>>(10+k)&1:
+                tree.append(memory_broadcast(enc))
+            else: tree.append(enc if k==0 and root_mask&2 else ir.broadcast(enc))
         for depth in (1, 2):
             base = (1 << depth)-1
             tree[base:base+(1 << depth)] = reversed(tree[base:base+(1 << depth)])
@@ -735,10 +817,14 @@ class KernelBuilder:
 
         record_deps = {depth: [image_stores[b] for b in depth_blocks[depth]] for depth in (3, 5, 7)}
         table_reads = defaultdict(list)
-        nbuf = int(os.getenv('ANCHOR_BUFFERS', '8'))
-        staging = [[sc(2054+8*j+k) for k in range(8)] for j in range(nbuf)]
+        staging = get_staging()
         ir.child_staging=staging
         last_pack = [None]*nbuf
+        # Finish every memory broadcast before constructing any walk. Stage
+        # reuse can then add only setup-to-walk dependencies; tail work never
+        # becomes a prerequisite of an earlier round through this mechanism.
+        for j,x in enumerate(mem_constants):
+            if mem_bits>>j&1: vc(x)
         final_values = []
         for g, v in enumerate(values):
             bits = []
@@ -806,7 +892,7 @@ class KernelBuilder:
                 v = hash_value(v, decode=r in (8, 9, 15))
                 if depth < 10 and r < 15:
                     signed = depth in (2, 4)
-                    parity_mod=os.getenv('PARITY_MOD2', '0')=='1'
+                    parity_mod=os.getenv('PARITY_MOD2')=='1'
                     bits.append(op('|' if signed else '%' if parity_mod else '&', v, vc(0xfffffffe) if signed else two if parity_mod else one))
             final_values.append(v)
 
