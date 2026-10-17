@@ -176,6 +176,7 @@ class KernelBuilder:
 from collections import defaultdict, Counter
 import os
 import heapq
+import json
 from problem import SLOT_LIMITS, DebugInfo, VLEN
 
 class IR:
@@ -206,7 +207,7 @@ class IR:
     def op(self,op,*src,e='flex'):
         d=self.new(); self.emit(e,(op,d,*src),[a+k for a in src for k in range(8)],range(d,d+8)); return d
     def select(self,bit,a,b,diff):
-        if os.getenv('FORCE_FLOW_SELECT','1')=='1':
+        if os.getenv('FORCE_FLOW_SELECT', '1')=='1':
             return self.op('vselect',bit,b,a,e='flow')
         d=self.new(); self.emit('select',('vselect',d,bit,b,a),[p+k for p in [bit,a,b,diff] for k in range(8)],range(d,d+8))
         self.nodes[-1].append(('multiply_add',d,bit,diff,a)); return d
@@ -348,7 +349,7 @@ class IR:
         constant_sources=[(v[1][2]&0xffffffff,v[1][1],i) for i,v in enumerate(n) if v[0]=='constflex']
         constant_sources.append((0,self.const_zero,None))
         wanted={v[1][2]&0xffffffff for v in n if v[0]=='constflex'}; recipes=defaultdict(list)
-        if int(os.getenv('CONST_ALU_CYCLES','16')):
+        if int(os.getenv('CONST_ALU_CYCLES', '20')):
             for va,a,ia in constant_sources:
                 for vb,b,ib in constant_sources:
                     pairs=[('+',(va+vb)&0xffffffff),('-',(va-vb)&0xffffffff),('^',va^vb),('&',va&vb),('|',va|vb),('*',(va*vb)&0xffffffff),('==',int(va==vb)),('<',int(va<vb))]
@@ -358,11 +359,11 @@ class IR:
                         if result in wanted: recipes[result].append((op,a,b,ia,ib))
         completed=[False]*len(n)
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else 1)+max([n[j][4] for j in n[i][3]] or [0])
-        bias=float(os.getenv('GROUP_BIAS','6')); tbias=float(os.getenv('TAIL_GROUP_BIAS','3')); toff=float(os.getenv('TAIL_OFFSET','150'))
-        round_offsets={15:8}; group_offsets={8:16,19:4}
+        bias=float(os.getenv('GROUP_BIAS', '5.75')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.75')); toff=float(os.getenv('TAIL_OFFSET', '170'))
+        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{"13": -4, "7": 2, "6": -4, "1": 8, "14": -4, "8": -8}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{"8": 16, "19": 4, "22": 8}')).items()}
         def score(i):
             ctx=n[i][5]
-            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET','-300'))
+            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-150'))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
@@ -372,7 +373,7 @@ class IR:
             if target is not None:
                 pending_lookup=None; bundle['lookup_target']=n[target][1][1]; chosen.append(target); used.add(target)
             pre_alu=0; pre_store=0
-            if target is None and len(ins)<int(os.getenv('CONST_ALU_CYCLES','16')):
+            if target is None and len(ins)<int(os.getenv('CONST_ALU_CYCLES', '20')):
                 remove=set()
                 for _,i in sorted(ready['constflex']):
                     d=n[i][1][1]; val=n[i][1][2]&0xffffffff
@@ -657,7 +658,7 @@ class KernelBuilder:
 
         record_deps = {depth: [image_stores[b] for b in depth_blocks[depth]] for depth in (3, 5, 7)}
         table_reads = defaultdict(list)
-        nbuf = int(os.getenv('ANCHOR_BUFFERS', '4'))
+        nbuf = int(os.getenv('ANCHOR_BUFFERS', '8'))
         staging = [[sc(2054+8*j+k) for k in range(8)] for j in range(nbuf)]
         last_pack = [None]*nbuf
         final_values = []
