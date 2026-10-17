@@ -251,6 +251,34 @@ class IR:
             self.emit('lookup',('lookup',li,ptr),[ptr,zero]+vr+rawtree,vo+vl+vv)
             self.lookups.append((vr,vo,vl,vv,rawtree,zero))
         return outs,left,right
+    def native_record(self,p,v):
+        out=self.new(); buffers=[]
+        for parity in (0,1):
+            buf=self.new(14+parity); buffers.append(buf)
+            for j,lane in enumerate(range(parity,8,2)):
+                dest=buf+parity+2*j
+                reads=[p+lane]; writes=list(range(dest,dest+8)); extra=None
+                if j:
+                    prev=lane-2; root=buf+parity+2*j
+                    extra=('^',out+prev,v+prev,root); reads.extend([v+prev,root]); writes.append(out+prev)
+                i=len(self.nodes); deps={self.last[a] for a in reads if a in self.last}; deps.update(getattr(self,'extra_deps',[]))
+                self.nodes.append(['record',('vload',dest,p+lane),list(deps),[],0,self.context,reads,writes,extra])
+                for d in deps: self.nodes[d][3].append(i)
+                for a in writes: self.last[a]=i
+            lane=parity+6; root=buf+parity+8
+            self.emit('alu',('^',out+lane,v+lane,root),[v+lane,root],[out+lane])
+        return out,buffers
+    def native_select(self,v,bit,buffers):
+        nodes=[]
+        for parity,buf in enumerate(buffers):
+            out=self.new()
+            # Only the four selected positions enter the value DAG. The other
+            # positions are physical don't-care results of the ordinary vselect.
+            reads=[bit+k for k in range(parity,8,2)]+[buf+k+j for k in range(parity,8,2) for j in (0,1)]
+            self.emit('flow',('vselect',out,bit,buf+1,buf),reads,range(out,out+8)); nodes.append(out)
+        out=self.new()
+        for k in range(8): self.emit('alu',('^',out+k,v+k,nodes[k%2]+k),[v+k,nodes[k%2]+k],[out+k])
+        return out
     def load(self,p,vector=True):
         d=self.new(8 if vector else 1); self.emit('load',('vload' if vector else 'load',d,p),[p],range(d,d+(8 if vector else 1))); return d
     def gather(self,p):
@@ -287,7 +315,7 @@ class IR:
         def score(i):
             ctx=n[i][5]
             return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]
-        pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu']}
+        pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
         partial=[]; ins=[]; usage=[]; pending_lookup=None
@@ -308,6 +336,12 @@ class IR:
                 if remove:
                     ready['constflex']=[t for t in ready['constflex'] if t[1] not in remove]; heapq.heapify(ready['constflex'])
             def take(e,i):
+                nonlocal pre_alu
+                if n[i][0]=='record':
+                    bundle.setdefault('load',[]).append(n[i][1])
+                    if n[i][8] is not None:
+                        bundle.setdefault('alu',[]).append(n[i][8]); pre_alu+=1
+                    chosen.append(i); used.add(i); return
                 bundle.setdefault(e,[]).append(n[i][8] if (n[i][0]=='select' and e=='valu') or (n[i][0] in ('constflex','flowalu') and e=='flow') else n[i][1]); chosen.append(i); used.add(i)
             for e in ('load','store','flow'):
                 if e=='flow' and target is not None:
@@ -315,7 +349,7 @@ class IR:
                         _,i=heapq.heappop(ready['lookup']); pending_lookup=i; used.add(i); bundle['flow']=[('jump_indirect',n[i][1][2])]
                     continue
                 for _ in range(SLOT_LIMITS[e]):
-                    pools=[e]+(['select','constflex','flowalu'] if e=='flow' else ['constflex'] if e=='load' else [])
+                    pools=[e]+(['select','constflex','flowalu'] if e=='flow' else ['constflex','record'] if e=='load' else [])
                     pool=min((p for p in pools if ready[p]),key=lambda p:(ready[p][0][0]+(float(os.getenv('FLOWALU_PREFERENCE','128')) if p=='flowalu' else 0),ready[p][0][1]),default=e)
                     if e=='flow' and ready['lookup'] and (not ready[pool] or ready['lookup'][0]<ready[pool][0]):
                         _,i=heapq.heappop(ready['lookup']); pending_lookup=i; used.add(i); bundle['flow']=[('jump_indirect',n[i][1][2])]; break
@@ -429,182 +463,82 @@ class KernelBuilder:
     def __init__(self): self.instrs=[]
     def debug_info(self): return DebugInfo({})
     def build_kernel(self,forest_height,n_nodes,batch_size,rounds):
-        ir=IR(); self.ir=ir
-        scalars={}; vectors={}; addr_scalars={}; lanes=None
-        def sc0(x):
-            nonlocal lanes
-            if os.getenv('ALU_RANGE','1')=='1' and lanes is None and 0<=x<=8:
-                lanes=ir.new(); z=ir.const(0); scalars[0]=z
-                recipe=[('+',z,z),('==',z,z),('+',lanes+1,lanes+1),('+',lanes+1,lanes+2),('+',lanes+2,lanes+2),('+',lanes+1,lanes+4),('+',lanes+3,lanes+3),('+',lanes+3,lanes+4)]
-                for k,(opname,a,b) in enumerate(recipe):
-                    ir.emit('alu',(opname,lanes+k,a,b),[a,b],[lanes+k])
-                    if k: scalars[k]=lanes+k
-                scalars[8]=ir.scalar('+',lanes+4,lanes+4)
+        ir=IR(); self.ir=ir; scalars={}; vectors={}; addr_cache={}
+        def sc(x):
+            x&=0xffffffff
             if x not in scalars: scalars[x]=ir.const(x)
             return scalars[x]
-        def sc(x):
-            nonlocal lanes
-            mode=int(os.getenv('VECTOR_ADDR','1'))
-            valuebase=7+n_nodes+batch_size
-            kind=1 if mode&1 and valuebase<=x<valuebase+batch_size and (x-valuebase)%8==0 else 2 if mode&2 and 38<=x<262 and x%8==6 else 4 if mode&4 and 7<=x<=31 and x%8==7 else 0
-            if not kind: return sc0(x)
-            if x not in addr_scalars:
-                if lanes is None:
-                    lanes=ir.new()
-                    for k in range(8): ir.emit('alu',('+',lanes+k,sc0(k),sc0(0)),[sc0(k),sc0(0)],[lanes+k])
-                origin=valuebase if kind==1 else 38 if kind==2 else 7
-                base=origin+64*((x-origin)//64)
-                if os.getenv('VECTOR_ADDR_INC','1')=='1' and base-64 in addr_scalars:
-                    vaddr=op('+',addr_scalars[base-64],vc(64))
-                else: vaddr=mad(lanes,vc(8),ir.broadcast(sc0(base)))
-                for k in range(8): addr_scalars[base+8*k]=vaddr+k
-            return addr_scalars[x]
         def vc(x):
+            x&=0xffffffff
             if x not in vectors: vectors[x]=ir.broadcast(sc(x))
             return vectors[x]
         def op(x,*a): return ir.op(x,*a)
         def mad(a,b,c): return ir.op('multiply_add',a,b,c,e='valu')
-        one=vc(1); two=vc(2); zero=vc(0)
+        def choice(bit,a,b): return ir.op('vselect',bit,a,b,e='flow')
+        one=vc(1); two=vc(2); zero=vc(0); three=vc(3); four=vc(4)
         hc=[vc(n) for n in [4097,0x7ED55D16,19,0xC761C23C,33,16896,(0x165667B1+0xD3A2646C)&0xffffffff,(0x165667B1<<9)&0xffffffff,9,0xFD7046C5,16,0xB55A4F09]]
-        cd=2
-        raw=ir.new(32)
-        for off in range(0,32,8): ir.emit('load',('vload',raw+off,sc(7+off)),[sc(7+off)],range(raw+off,raw+off+8))
-        root_original=ir.broadcast(raw)
-        rawtree=[]
-        for off in range(0,32,8):
-            part=op('^',raw+off,hc[11]); rawtree.extend(range(part,part+8))
-        rawtree=rawtree[:31]
-        tree=[ir.broadcast(rawtree[k]) for k in range(7)]
-        for depth in range(1,3):
+        raw=ir.load(sc(7)); root_original=ir.broadcast(raw)
+        enc=op('^',raw,hc[11]); tree=[ir.broadcast(enc+k) for k in range(7)]
+        for depth in (1,2):
             base=(1<<depth)-1; tree[base:base+(1<<depth)]=reversed(tree[base:base+(1<<depth)])
         diffs={}
-        for depth in range(1,3):
+        for depth in (1,2):
             base=(1<<depth)-1
             for k in range(1<<(depth-1)): diffs[base+2*k]=op('-',tree[base+2*k+1],tree[base+2*k])
-        transformed={}
-        mirror_max=min(forest_height,int(os.getenv('TRANSFORM_DEPTH','7')))
-        if mirror_max>=5:
-            # Mirror levels 5..mirror_max and relocate them from physical base
-            # 7 to base 3. The destination of source offset j at depth d is
-            # 2**(d+1)+1-j. Read the whole source region before storing: the
-            # four-word relocation also overlaps the preceding level/cache.
-            original_reads=set(ir.last[raw+k] for k in range(32))
-            sources=[]
-            for level in range(5,mirror_max+1):
-                for off in [j for pair in zip(range(0,(1<<level)//2,8),range((1<<level)-8,(1<<level)//2-1,-8)) for j in pair]:
-                    data=ir.load(sc((1<<level)+6+off))
-                    sources.append((level,off,data))
-                    original_reads.add(ir.last[data])
-            for level,off,data in sources:
+        def hash(v):
+            v=mad(v,hc[0],hc[1]); v=op('^',op('^',v,hc[3]),op('>>',v,hc[2]))
+            v=op('^',mad(v,hc[4],hc[6]),mad(v,hc[5],hc[7]))
+            v=mad(v,hc[8],hc[9]); return op('^',v,op('>>',v,hc[10]))
+        source={}; source_nodes=[]
+        for off in range(0,504,8):
+            data=ir.load(sc(14+off)); source_nodes.append(ir.last[data])
+            for k in range(8): source[7+off+k]=data+k
+        record_tokens={}; bases={3:14,5:38,7:134}
+        for depth,base in bases.items():
+            seq=[]
+            for path in range(1<<depth):
+                node=(1<<(depth+1))-2-path; seq.extend([source[2*node+2],source[2*node+1],source[node]])
+            for off in range(0,len(seq),8):
                 out=ir.new()
-                for k in range(8):
-                    ir.emit('alu',('^',out+k,data+7-k,sc(0xB55A4F09)),
-                            [data+7-k,sc(0xB55A4F09)],[out+k])
-                ir.extra_deps=original_reads
-                token=ir.store(sc((1<<(level+1))-6-off),out)
-                ir.extra_deps=[]
-                transformed.setdefault(level,[]).append(token)
-        vals=[ir.load(sc(7+n_nodes+batch_size+8*g)) for g in range(batch_size//8)]
-        states=[None]*len(vals)
-        for g,v in enumerate(vals):
-            idx=zero; bits=[]
-            for r in range(min(rounds,forest_height+1)):
+                for k in range(8): ir.emit('alu',('^',out+k,seq[off+k],sc(0xB55A4F09)),[seq[off+k],sc(0xB55A4F09)],[out+k])
+                ir.extra_deps=source_nodes; token=ir.store(sc(base+off),out); ir.extra_deps=[]; record_tokens.setdefault(depth,[]).append(token)
+        values=[ir.load(sc(7+n_nodes+batch_size+8*g)) for g in range(batch_size//8)]
+        inv3=pow(3,-1,1<<32); mul9=(-4*inv3)&0xffffffff; bias9=(1029-mul9*bases[7])&0xffffffff
+        for g,v in enumerate(values):
+            idx=zero; bits=[]; children=None
+            for r in range(rounds):
                 ir.context=(g,r); depth=r%(forest_height+1)
-                if depth==0: node=root_original if r==0 else tree[0]
-                elif depth<=cd:
+                if depth==0:
+                    node=root_original if r==0 else tree[0]; v=op('^',v,node)
+                elif depth<=2:
                     nodes=tree[(1<<depth)-1:(1<<(depth+1))-1]
                     for level in range(depth):
                         bit=bits[-1-level]
                         if level==0:
-                            base=(1<<depth)-1
-                            nodes=[ir.select(bit,nodes[2*k],nodes[2*k+1],diffs[base+2*k]) for k in range(len(nodes)//2)]
-                        else: nodes=[ir.op('vselect',bit,nodes[2*k+1],nodes[2*k],e='flow') for k in range(len(nodes)//2)]
-                    node=nodes[0]
-                elif depth==3:
-                    v,left,right=ir.lookup(idx,v,rawtree,sc(0),sc); node=None
-                elif depth==4:
-                    node=ir.op('vselect',bits[-1],right,left,e='flow')
-                else:
-                    ir.extra_deps=transformed.get(depth,[])
-                    node=ir.gather(idx); ir.extra_deps=[]
-                    if depth not in transformed: node=op('^',node,hc[11])
-                if node is not None: v=op('^',v,node)
-                v=mad(v,hc[0],hc[1]); v=op('^',op('^',v,hc[3]),op('>>',v,hc[2]))
-                v=op('^',mad(v,hc[4],hc[6]),mad(v,hc[5],hc[7]))
-                v=mad(v,hc[8],hc[9]); v=op('^',v,op('>>',v,hc[10]))
+                            base=(1<<depth)-1; nodes=[ir.select(bit,nodes[2*k],nodes[2*k+1],diffs[base+2*k]) for k in range(len(nodes)//2)]
+                        else: nodes=[choice(bit,nodes[2*k+1],nodes[2*k]) for k in range(len(nodes)//2)]
+                    v=op('^',v,nodes[0])
+                elif depth in (3,5,7):
+                    ir.extra_deps=record_tokens[depth]; v,children=ir.native_record(idx,v); ir.extra_deps=[]
+                elif depth in (4,6,8): v=ir.native_select(v,bits[-1],children)
+                else: v=op('^',v,op('^',ir.gather(idx),hc[11]))
+                v=hash(v)
                 if r+1<rounds:
-                    if depth==forest_height:idx=zero;bits=[]
-                    elif mirror_max>=5 and 4<=depth<mirror_max:
-                        # In mirrored base-3 coordinates the next address is
-                        # 2*p - 2 + q. OR produces -2+q directly from the
-                        # encoded hash, removing the separate FLOW select.
-                        bias=op('|',v,vc(0xfffffffe))
-                        idx=mad(idx,two,bias)
+                    if depth==forest_height: idx=zero; bits=[]
                     else:
-                        bit=op('&',v,one);bits.append(bit)
-                        if depth==0:idx=bit
-                        elif depth==3:
-                            if mirror_max>=5:
-                                # The cached depth-4 selection does not need
-                                # its address, so carry its mirrored base-3
-                                # address for the following gather instead.
-                                bias=ir.op('vselect',bit,vc(19),vc(18),e='flow')
-                                idx=mad(idx,two,bias)
-                            else:
-                                bias=ir.op('vselect',bit,vc(36),vc(37),e='flow')
-                                idx=mad(idx,vc((-2)&0xffffffff),bias)
-                        elif mirror_max>=5 and depth==mirror_max:
-                            # Return once to the original layout. The mirror
-                            # of heap index i at depth d is 3*2**d-3-i.
-                            c=6*(1<<depth)+9
-                            bias=ir.op('vselect',bit,vc(c-1),vc(c),e='flow')
-                            idx=mad(idx,vc((-2)&0xffffffff),bias)
-                        elif 4<=depth<forest_height:
-                            bias=ir.op('vselect',bit,vc((-6)&0xffffffff),vc((-5)&0xffffffff),e='flow')
-                            idx=mad(idx,two,bias)
-                        else:idx=mad(idx,two,bit)
-            states[g]=v
-        for g0 in range(0,len(vals),2):
-            pair=[states[g0],states[g0+1]]; hist=[[],[]]; packed=None
-            for depth in range(rounds-forest_height-1):
-                r=forest_height+1+depth
-                if depth==3:
-                    ir.context=(g0,r); pair,lefts,rights=ir.lookup_pair(packed,pair,rawtree,sc(0),sc)
-                for j in range(2):
-                    g=g0+j; ir.context=(g,r); v=pair[j]
-                    if depth==0: node=tree[0]
-                    elif depth<=2:
-                        nodes=tree[(1<<depth)-1:(1<<(depth+1))-1]
-                        for lev in range(depth):
-                            bit=hist[j][-1-lev]
-                            if lev==0:
-                                base=(1<<depth)-1
-                                nodes=[ir.select(bit,nodes[2*k],nodes[2*k+1],diffs[base+2*k]) for k in range(len(nodes)//2)]
-                            else: nodes=[ir.op('vselect',bit,nodes[2*k+1],nodes[2*k],e='flow') for k in range(len(nodes)//2)]
-                        node=nodes[0]
-                    elif depth==3: node=None
-                    elif depth==4: node=ir.op('vselect',hist[j][-1],rights[j],lefts[j],e='flow')
-                    else: raise ValueError('packed tail supports five tree levels')
-                    if node is not None: v=op('^',v,node)
-                    v=mad(v,hc[0],hc[1]); v=op('^',op('^',v,hc[3]),op('>>',v,hc[2]))
-                    v=op('^',mad(v,hc[4],hc[6]),mad(v,hc[5],hc[7]))
-                    v=mad(v,hc[8],hc[9]); v=op('^',v,op('>>',v,hc[10])); pair[j]=v
-                    if depth<4: hist[j].append(op('&',v,one))
-                if depth<3:
-                    ir.context=(g0,r); a,b=hist[0][-1],hist[1][-1]
-                    if g0//2<int(os.getenv('PACK_FLOW_GROUPS','16')) and (int(os.getenv('PACK_FLOW_MASK','3'))>>depth)&1:
-                        ap8=ir.op('vselect',a,vc(9),vc(8),e='flow')
-                        bits=ir.op('vselect',b,ap8,a,e='flow')
-                    else: bits=mad(b,vc(8),a)
-                    packed=bits if depth==0 else mad(packed,two,bits)
-            for j in range(2):
-                g=g0+j; ir.context=(g,rounds); dest=ir.new()
-                for k in range(8):
-                    src=pair[k//4]+2*(k%4)+j
-                    ir.emit('alu',('^',dest+k,src,sc(0xB55A4F09)),[src,sc(0xB55A4F09)],[dest+k])
-                ir.store(sc(7+n_nodes+batch_size+8*g),dest)
+                        bit=op('&',v,one); bits.append(bit)
+                        if depth==0: idx=bit
+                        elif depth==1: idx=mad(idx,two,bit)
+                        elif depth==2: idx=mad(idx,vc(6),choice(bit,vc(bases[3]+3),vc(bases[3])))
+                        elif depth in (3,5): idx=mad(idx,four,choice(bit,vc(-12),vc(-18)))
+                        elif depth in (4,6): idx=mad(bit,three,idx)
+                        elif depth==7: idx=mad(idx,vc(mul9),choice(bit,vc(bias9-2),vc(bias9)))
+                        elif depth==8: idx=op('-',idx,bit)
+                        elif depth==9: idx=mad(idx,two,choice(bit,vc(-6),vc(-5)))
+            ir.context=(g,rounds); v=op('^',v,hc[11]); ir.store(sc(7+n_nodes+batch_size+8*g),v)
         self.instrs,self.scratch_ptr,self.counts=ir.compile(); self.schedule_cycles=ir.logical_cycles
         if self.scratch_ptr>1536: raise RuntimeError('scratch peak '+str(self.scratch_ptr))
+
 
 
 
