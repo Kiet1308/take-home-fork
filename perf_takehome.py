@@ -440,7 +440,7 @@ class IR:
         constant_sources=[(v[1][2]&0xffffffff,v[1][1],i) for i,v in enumerate(n) if v[0]=='constflex']
         constant_sources.append((0,self.const_zero,None))
         wanted={v[1][2]&0xffffffff for v in n if v[0]=='constflex'}; recipes=defaultdict(list)
-        if int(os.getenv('CONST_ALU_CYCLES', '20')):
+        if int(os.getenv('CONST_ALU_CYCLES', '24')):
             for va,a,ia in constant_sources:
                 for vb,b,ib in constant_sources:
                     pairs=[('+',(va+vb)&0xffffffff),('-',(va-vb)&0xffffffff),('^',va^vb),('&',va&vb),('|',va|vb),('*',(va*vb)&0xffffffff),('==',int(va==vb)),('<',int(va<vb))]
@@ -449,16 +449,16 @@ class IR:
                     for op,result in pairs:
                         if result in wanted: recipes[result].append((op,a,b,ia,ib))
         completed=[False]*len(n)
-        cpw=json.loads(os.getenv('CP_WEIGHTS', '{"load": 1.25, "flow": 1.25}'))
+        cpw=json.loads(os.getenv('CP_WEIGHTS', '{"load": 1.5, "flow": 1.25, "store": 0.75}'))
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else cpw.get(n[i][0],1))+max([n[j][4] for j in n[i][3]] or [0])
-        bias=float(os.getenv('GROUP_BIAS', '5.25')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.5')); toff=float(os.getenv('TAIL_OFFSET', '150'))
-        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{"15": 16, "4": 2, "10": -8, "5": 12, "8": 4, "12": 4, "1": -4}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{"2": -2}')).items()}
-        context_offsets=json.loads(os.getenv('CONTEXT_OFFSETS', '{"18,13": 2, "7,1": 4, "5,5": 2, "3,14": 2, "0,0": 2, "8,12": 4, "15,4": 2, "24,2": -4, "30,0": 2, "1,10": 8, "20,1": 8, "20,7": 2, "9,16": 4, "3,11": 2, "25,8": -8, "8,1": 8, "9,3": -4}'))
-        engine_offsets=json.loads(os.getenv('ENGINE_OFFSETS', '{"valu": -4, "load": -4}'))
+        bias=float(os.getenv('GROUP_BIAS', '5.75')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.5')); toff=float(os.getenv('TAIL_OFFSET', '150'))
+        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{"2": -2}')).items()}
+        context_offsets=json.loads(os.getenv('CONTEXT_OFFSETS', '{"18,13": 2, "7,1": 4, "5,5": 2, "3,14": 2, "0,0": 2, "8,12": 4, "15,4": 2, "24,2": -4, "30,0": 2, "1,10": 8, "20,1": 8, "20,7": 2, "9,16": 4, "3,11": 2, "25,8": -8, "8,1": 8, "9,3": -4, "30,6": -2, "11,11": -6, "17,4": 4, "14,16": 4, "28,0": -8, "16,0": 8, "16,16": -4, "20,0": 2, "13,5": -8, "26,3": -4, "24,6": -4, "11,15": -4, "8,16": -2, "9,13": 4, "22,12": -8, "1,0": 8, "30,1": 8}'))
+        engine_offsets=json.loads(os.getenv('ENGINE_OFFSETS', '{"valu": -4, "load": -4, "record": 6, "flex": -2}'))
         def score(i):
             ctx=n[i][5]
             extra=engine_offsets.get(n[i][0],0)+(context_offsets.get(str(ctx[0])+','+str(ctx[1]),0) if ctx else 0)
-            return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-300')))
+            return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-125')))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record','pairalu']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
@@ -472,7 +472,7 @@ class IR:
                 while ready['pairalu'] and pre_alu<SLOT_LIMITS['alu']:
                     _,i=heapq.heappop(ready['pairalu']); bundle.setdefault('alu',[]).append(n[i][1])
                     pre_alu+=1; chosen.append(i); used.add(i)
-            if target is None and pre_alu<SLOT_LIMITS['alu'] and len(ins)<int(os.getenv('CONST_ALU_CYCLES', '20')):
+            if target is None and pre_alu<SLOT_LIMITS['alu'] and len(ins)<int(os.getenv('CONST_ALU_CYCLES', '24')):
                 remove=set()
                 for _,i in sorted(ready['constflex']):
                     d=n[i][1][1]; val=n[i][1][2]&0xffffffff
@@ -546,7 +546,7 @@ class IR:
         assert pause_cycle<first_output_cycle
         ins[pause_cycle]['flow']=[('pause',)]
         start={}; end={}; word_end={}
-        split_lifetimes=os.getenv("SPLIT_LIFETIMES","1")=="1"
+        split_lifetimes=os.getenv('SPLIT_LIFETIMES', '1')=="1"
         for cyc,used in enumerate(usage):
             for i in used:
                 for a in n[i][7]:
@@ -655,14 +655,14 @@ class KernelBuilder:
         pair_values=[(33,16896),(0xaccf6200,0xfd7046c5),(4097,0x7ed55d16),(19,0xc761c23c),(0xe9f8cc1d,9),(16,0xb55a4f09),(3,4),(0xfffffffe,-40),(-60,2430),(2310,1030),(1032,1029)]
         mem_names=('c5','x0','x1','y0','y1','v0','v1','d00','d01','d10','d11','node1','node2','node3','node4','node5','node6')
         mem_constants=(0xb55a4f09,-60,-40,2310,2430,4,16,1031,1032,1029,1030)
-        mem_bits=int(os.getenv('MEM_BCAST_MASK', '75276'),0)
+        mem_bits=int(os.getenv('MEM_BCAST_MASK', '90764'),0)
         mem_values={x&0xffffffff for j,x in enumerate(mem_constants) if mem_bits>>j&1}
         single_constants=mem_constants+(4097,0x7ed55d16,19,0xc761c23c,33,16896,0xe9f8cc1d,0xaccf6200,9,0xfd7046c5,0xfffffffe,1,3)
         # Bits0..16 match MEM_BCAST_MASK; 11..16 are cached nodes1..6.
         single_items=list(enumerate(mem_constants))+list(enumerate(single_constants[11:],17))
-        single_bits=int(os.getenv('SINGLE_BCAST_MASK', '388039234'),0)
+        single_bits=int(os.getenv('SINGLE_BCAST_MASK', '103416387'),0)
         single_values={x&0xffffffff for j,x in single_items if single_bits>>j&1} - mem_values
-        pair_bits=int(os.getenv('PAIR_MASK', '258'),0)
+        pair_bits=int(os.getenv('PAIR_MASK', '266'),0)
         for j,pair in enumerate(pair_values):
             if any((x&0xffffffff) in (mem_values|single_values) for x in pair): pair_bits &= ~(1<<j)
         nbuf=int(os.getenv('ANCHOR_BUFFERS', '4'))
@@ -703,7 +703,7 @@ class KernelBuilder:
         def memory_broadcast(a):
             nonlocal mem_broadcast_count
             buffers=get_staging()
-            rotation=int(os.getenv('MEM_BCAST_ROTATION', '0'))
+            rotation=int(os.getenv('MEM_BCAST_ROTATION', '4'))
             step=int(os.getenv('MEM_BCAST_STEP', '7'))
             pointers=buffers[(rotation+step*mem_broadcast_count)%nbuf]
             mem_broadcast_count+=1
@@ -799,7 +799,7 @@ class KernelBuilder:
                     scalars[value] = dest
 
         raw = ir.load(sc(7))
-        root_mask=int(os.getenv('ROOT_SCALAR', '0'))
+        root_mask=int(os.getenv('ROOT_SCALAR', '2'))
         root_original = raw if root_mask&1 else ir.broadcast(raw)
         original_reads = [ir.last[raw]]
         source = {k: raw+k for k in range(7)}
