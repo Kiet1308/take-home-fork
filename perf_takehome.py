@@ -251,23 +251,69 @@ class IR:
             self.emit('lookup',('lookup',li,ptr),[ptr,zero]+vr+rawtree,vo+vl+vv)
             self.lookups.append((vr,vo,vl,vv,rawtree,zero))
         return outs,left,right
-    def native_record(self,p,v):
-        out=self.new(); buffers=[]
+    def _native_compound(self,load,reads,writes,xor=None,store=None):
+        reads=list(reads); writes=list(writes)
+        if xor is not None:
+            reads.extend(xor[2:]); writes.append(xor[1])
+        if store is not None: reads.extend(store[1:])
+        i=len(self.nodes)
+        deps={self.last[a] for a in reads if a in self.last}
+        deps.update(getattr(self,'extra_deps',[]))
+        self.nodes.append(['record',load,list(deps),[],0,self.context,reads,writes,xor,store])
+        for d in deps: self.nodes[d][3].append(i)
+        for a in writes: self.last[a]=i
+        return i
+    def native_record(self,p,v,anchor_ptrs=None):
+        """Load eight [child0,child1,node,(anchor)] records.
+
+        Return the values XOR node, two child buffers for native_select, and,
+        when anchor_ptrs is provided, the anchors packed into a vector through
+        eight scalar stores followed by one vload. anchor_ptrs are eight scratch
+        scalar pointers to consecutive memory words reserved for this call.
+        """
+        out=self.new(); buffers=[]; tokens=[]
+        inherited=list(getattr(self,'extra_deps',[]))
         for parity in (0,1):
             buf=self.new(14+parity); buffers.append(buf)
             for j,lane in enumerate(range(parity,8,2)):
-                dest=buf+parity+2*j
-                reads=[p+lane]; writes=list(range(dest,dest+8)); extra=None
+                dest=buf+parity+2*j; xor=None; store=None
                 if j:
                     prev=lane-2; root=buf+parity+2*j
-                    extra=('^',out+prev,v+prev,root); reads.extend([v+prev,root]); writes.append(out+prev)
-                i=len(self.nodes); deps={self.last[a] for a in reads if a in self.last}; deps.update(getattr(self,'extra_deps',[]))
-                self.nodes.append(['record',('vload',dest,p+lane),list(deps),[],0,self.context,reads,writes,extra])
-                for d in deps: self.nodes[d][3].append(i)
-                for a in writes: self.last[a]=i
+                    xor=('^',out+prev,v+prev,root)
+                    if anchor_ptrs is not None:
+                        store=('store',anchor_ptrs[prev],root+1)
+                token=self._native_compound(('vload',dest,p+lane),[p+lane],range(dest,dest+8),xor,store)
+                if store is not None: tokens.append(token)
             lane=parity+6; root=buf+parity+8
             self.emit('alu',('^',out+lane,v+lane,root),[v+lane,root],[out+lane])
-        return out,buffers
+            if anchor_ptrs is not None:
+                self.emit('store',('store',anchor_ptrs[lane],root+1),[anchor_ptrs[lane],root+1],[])
+                tokens.append(len(self.nodes)-1)
+        if anchor_ptrs is None: return out,buffers
+        self.extra_deps=inherited+tokens
+        anchor=self.load(anchor_ptrs[0])
+        self.extra_deps=inherited
+        return out,buffers,anchor
+    def gather_xor_word(self,p,v,offset=3,chains=2):
+        """XOR values with word offset of eight contiguous native vloads.
+
+        Each chain reuses one load buffer. A compound preserves the preceding
+        selected word with scalar XOR in the same cycle that vload overwrites
+        it. It emits no scratch copies and no pointer adjustment instructions.
+        """
+        assert 0<=offset<8 and 1<=chains<=8
+        out=self.new()
+        for first in range(chains):
+            buf=self.new()
+            lanes=list(range(first,8,chains))
+            for j,lane in enumerate(lanes):
+                xor=None
+                if j:
+                    prev=lanes[j-1]; xor=('^',out+prev,v+prev,buf+offset)
+                self._native_compound(('vload',buf,p+lane),[p+lane],range(buf,buf+8),xor)
+            lane=lanes[-1]
+            self.emit('alu',('^',out+lane,v+lane,buf+offset),[v+lane,buf+offset],[out+lane])
+        return out
     def native_select(self,v,bit,buffers):
         nodes=[]
         for parity,buf in enumerate(buffers):
@@ -310,11 +356,11 @@ class IR:
                         if result in wanted: recipes[result].append((op,a,b,ia,ib))
         completed=[False]*len(n)
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else 1)+max([n[j][4] for j in n[i][3]] or [0])
-        bias=float(os.getenv('GROUP_BIAS','7')); tbias=float(os.getenv('TAIL_GROUP_BIAS','4')); toff=float(os.getenv('TAIL_OFFSET','100'))
+        bias=float(os.getenv('GROUP_BIAS','5')); tbias=float(os.getenv('TAIL_GROUP_BIAS','4')); toff=float(os.getenv('TAIL_OFFSET','100'))
         round_offsets={15:8}; group_offsets={8:16,19:4}
         def score(i):
             ctx=n[i][5]
-            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]
+            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET','-300'))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
@@ -323,7 +369,7 @@ class IR:
             bundle={}; chosen=[]; used=set(); target=pending_lookup
             if target is not None:
                 pending_lookup=None; bundle['lookup_target']=n[target][1][1]; chosen.append(target); used.add(target)
-            pre_alu=0
+            pre_alu=0; pre_store=0
             if target is None and len(ins)<int(os.getenv('CONST_ALU_CYCLES','8')):
                 remove=set()
                 for _,i in sorted(ready['constflex']):
@@ -336,24 +382,33 @@ class IR:
                 if remove:
                     ready['constflex']=[t for t in ready['constflex'] if t[1] not in remove]; heapq.heapify(ready['constflex'])
             def take(e,i):
-                nonlocal pre_alu
+                nonlocal pre_alu, pre_store
                 if n[i][0]=='record':
                     bundle.setdefault('load',[]).append(n[i][1])
                     if n[i][8] is not None:
                         bundle.setdefault('alu',[]).append(n[i][8]); pre_alu+=1
+                    if len(n[i])>9 and n[i][9] is not None:
+                        bundle.setdefault('store',[]).append(n[i][9]); pre_store+=1
                     chosen.append(i); used.add(i); return
                 bundle.setdefault(e,[]).append(n[i][8] if (n[i][0]=='select' and e=='valu') or (n[i][0] in ('constflex','flowalu') and e=='flow') else n[i][1]); chosen.append(i); used.add(i)
             for e in ('load','store','flow'):
+                if e=='flow' and not ins:
+                    bundle['flow']=[('pause',)]; continue
                 if e=='flow' and target is not None:
                     if ready['lookup']:
                         _,i=heapq.heappop(ready['lookup']); pending_lookup=i; used.add(i); bundle['flow']=[('jump_indirect',n[i][1][2])]
                     continue
-                for _ in range(SLOT_LIMITS[e]):
+                for _ in range(SLOT_LIMITS[e]-(pre_store if e=='store' else 0)):
                     pools=[e]+(['select','constflex','flowalu'] if e=='flow' else ['constflex','record'] if e=='load' else [])
-                    pool=min((p for p in pools if ready[p]),key=lambda p:(ready[p][0][0]+(float(os.getenv('FLOWALU_PREFERENCE','128')) if p=='flowalu' else 0),ready[p][0][1]),default=e)
+                    def admissible(p):
+                        if not ready[p]: return False
+                        i=ready[p][0][1]
+                        if p!='record': return True
+                        return (n[i][8] is None or (target is None and pre_alu<SLOT_LIMITS['alu'])) and (len(n[i])<=9 or n[i][9] is None or pre_store<SLOT_LIMITS['store'])
+                    pool=min((p for p in pools if admissible(p)),key=lambda p:(ready[p][0][0]+(float(os.getenv('FLOWALU_PREFERENCE','128')) if p=='flowalu' else 0),ready[p][0][1]),default=e)
                     if e=='flow' and ready['lookup'] and (not ready[pool] or ready['lookup'][0]<ready[pool][0]):
                         _,i=heapq.heappop(ready['lookup']); pending_lookup=i; used.add(i); bundle['flow']=[('jump_indirect',n[i][1][2])]; break
-                    if not ready[pool]: break
+                    if not admissible(pool): break
                     _,i=heapq.heappop(ready[pool]); take(e,i)
             for _ in range(SLOT_LIMITS['valu']):
                 pools=[p for p in ('valu','flex','select') if ready[p]]
@@ -384,7 +439,7 @@ class IR:
         # Pause at an unused FLOW slot before any output values are written.
         # This preserves the original reference harness's initial yield; the
         # submission harness ignores pauses, so no extra cycle is needed.
-        pause_cycle=next(c for c,b in enumerate(ins) if 'lookup_target' not in b and not b.get('flow'))
+        pause_cycle=0
         first_output_cycle=min(c for c,used in enumerate(usage) if any(n[i][0]=='store' and n[i][5] is not None for i in used))
         assert pause_cycle<first_output_cycle
         ins[pause_cycle]['flow']=[('pause',)]
@@ -459,88 +514,228 @@ class IR:
         return main,peak,counts
 
 
+
 class KernelBuilder:
-    def __init__(self): self.instrs=[]
-    def debug_info(self): return DebugInfo({})
-    def build_kernel(self,forest_height,n_nodes,batch_size,rounds):
-        ir=IR(); self.ir=ir; scalars={}; vectors={}; addr_cache={}
+    def __init__(self):
+        self.instrs = []
+
+    def debug_info(self):
+        return DebugInfo({})
+
+    def build_kernel(self, forest_height, n_nodes, batch_size, rounds):
+        assert (forest_height, n_nodes, batch_size, rounds) == (10, 2047, 256, 16)
+        ir = IR()
+        self.ir = ir
+        scalars = {}
+        vectors = {}
+
         def sc(x):
-            x&=0xffffffff
-            if x not in scalars: scalars[x]=ir.const(x)
+            x &= 0xffffffff
+            if x not in scalars:
+                scalars[x] = ir.const(x)
             return scalars[x]
+
         def vc(x):
-            x&=0xffffffff
-            if x not in vectors: vectors[x]=ir.broadcast(sc(x))
+            x &= 0xffffffff
+            if x not in vectors:
+                vectors[x] = ir.broadcast(sc(x))
             return vectors[x]
-        def op(x,*a): return ir.op(x,*a)
-        def mad(a,b,c): return ir.op('multiply_add',a,b,c,e='valu')
-        def choice(bit,a,b): return ir.op('vselect',bit,a,b,e='flow')
-        one=vc(1); two=vc(2); zero=vc(0); three=vc(3); four=vc(4)
-        hc=[vc(n) for n in [4097,0x7ED55D16,19,0xC761C23C,33,16896,(0x165667B1+0xD3A2646C)&0xffffffff,(0x165667B1<<9)&0xffffffff,9,0xFD7046C5,16,0xB55A4F09]]
-        raw=ir.load(sc(7)); root_original=ir.broadcast(raw)
-        enc=op('^',raw,hc[11]); tree=[ir.broadcast(enc+k) for k in range(7)]
-        for depth in (1,2):
-            base=(1<<depth)-1; tree[base:base+(1<<depth)]=reversed(tree[base:base+(1<<depth)])
-        diffs={}
-        for depth in (1,2):
-            base=(1<<depth)-1
-            for k in range(1<<(depth-1)): diffs[base+2*k]=op('-',tree[base+2*k+1],tree[base+2*k])
-        def hash(v):
-            v=mad(v,hc[0],hc[1]); v=op('^',op('^',v,hc[3]),op('>>',v,hc[2]))
-            v=op('^',mad(v,hc[4],hc[6]),mad(v,hc[5],hc[7]))
-            v=mad(v,hc[8],hc[9]); return op('^',v,op('>>',v,hc[10]))
-        source={}; source_nodes=[]
-        for off in range(0,504,8):
-            data=ir.load(sc(14+off)); source_nodes.append(ir.last[data])
-            for k in range(8): source[7+off+k]=data+k
-        record_tokens={}; bases={3:14,5:38,7:134}
-        for depth,base in bases.items():
-            seq=[]
-            for path in range(1<<depth):
-                node=(1<<(depth+1))-2-path; seq.extend([source[2*node+2],source[2*node+1],source[node]])
-            for off in range(0,len(seq),8):
-                out=ir.new()
-                for k in range(8): ir.emit('alu',('^',out+k,seq[off+k],sc(0xB55A4F09)),[seq[off+k],sc(0xB55A4F09)],[out+k])
-                ir.extra_deps=source_nodes; token=ir.store(sc(base+off),out); ir.extra_deps=[]; record_tokens.setdefault(depth,[]).append(token)
-        values=[ir.load(sc(7+n_nodes+batch_size+8*g)) for g in range(batch_size//8)]
-        inv3=pow(3,-1,1<<32); mul9=(-4*inv3)&0xffffffff; bias9=(1029-mul9*bases[7])&0xffffffff
-        for g,v in enumerate(values):
-            idx=zero; bits=[]; children=None
-            for r in range(rounds):
-                ir.context=(g,r); depth=r%(forest_height+1)
-                if depth==0:
-                    node=root_original if r==0 else tree[0]; v=op('^',v,node)
-                elif depth<=2:
-                    nodes=tree[(1<<depth)-1:(1<<(depth+1))-1]
-                    for level in range(depth):
-                        bit=bits[-1-level]
-                        if level==0:
-                            base=(1<<depth)-1; nodes=[ir.select(bit,nodes[2*k],nodes[2*k+1],diffs[base+2*k]) for k in range(len(nodes)//2)]
-                        else: nodes=[choice(bit,nodes[2*k+1],nodes[2*k]) for k in range(len(nodes)//2)]
-                    v=op('^',v,nodes[0])
-                elif depth in (3,5,7):
-                    ir.extra_deps=record_tokens[depth]; v,children=ir.native_record(idx,v); ir.extra_deps=[]
-                elif depth in (4,6,8): v=ir.native_select(v,bits[-1],children)
-                else: v=op('^',v,op('^',ir.gather(idx),hc[11]))
-                v=hash(v)
-                if r+1<rounds:
-                    if depth==forest_height: idx=zero; bits=[]
+
+        def op(name, *args):
+            return ir.op(name, *args)
+
+        def mad(a, b, c):
+            return ir.op('multiply_add', a, b, c, e='valu')
+
+        def select(bit, yes, no):
+            return ir.op('vselect', bit, yes, no, e='flow')
+
+        zero = sc(0)
+        one, two, three, four = [vc(k) for k in (1, 2, 3, 4)]
+        hc = [vc(n) for n in (
+            4097, 0x7ed55d16, 19, 0xc761c23c,
+            33, 16896, 0xe9f8cc1d, 0xaccf6200,
+            9, 0xfd7046c5, 16, 0xb55a4f09,
+        )]
+
+        def hash_value(v, decode=False):
+            a = mad(v, hc[0], hc[1])
+            b = op('^', op('^', a, hc[3]), op('>>', a, hc[2]))
+            d = op('^', mad(b, hc[4], hc[6]), mad(b, hc[5], hc[7]))
+            e = mad(d, hc[8], hc[9])
+            # Apply a needed C5 correction before the branch-bit extraction.
+            left = op('^', e, hc[11]) if decode else e
+            return op('^', left, op('>>', e, hc[10]))
+
+        X = (-60, -40)
+        Y = (2310, 2430)
+        V = (4, 16)
+        records = {}
+        payload = {}
+        depth_blocks = defaultdict(set)
+        block_fields = defaultdict(dict)
+        for depth in (3, 5, 7):
+            for path in range(1 << depth):
+                q = [(path >> (depth-1-j)) & 1 for j in range(depth)]
+                if depth == 7:
+                    addr = 6 + 4*path
+                else:
+                    addr = Y[q[1]] + (q[2]-2)*X[q[0]]
+                    if depth == 5:
+                        addr += (q[4]-2)*V[q[3]]
+                node = (1 << (depth+1))-2-path
+                fields = [('tree', 2*node+2), ('tree', 2*node+1), ('tree', node)]
+                if depth == 5:
+                    fields.append(('anchor', 6+16*path))
+                records[depth, path] = addr
+                for k, value in enumerate(fields):
+                    loc = addr+k
+                    assert loc not in payload
+                    payload[loc] = value
+                    origin = 2310 if loc >= 2310 else 6
+                    block = origin + ((loc-origin)//8)*8
+                    depth_blocks[depth].add(block)
+                    block_fields[block][loc-block] = value
+                assert addr+7 < 2566
+
+        image = {block: ir.new() for block in sorted(block_fields)}
+        # The 32 anchors coincide with already-needed tree-grid addresses.
+        # Define each constant directly in its image field and reuse that word.
+        for block, fields in block_fields.items():
+            for off, (kind, value) in fields.items():
+                if kind != 'anchor':
+                    continue
+                dest = image[block]+off
+                if value in scalars:
+                    ir.emit('alu', ('+', dest, scalars[value], zero),
+                            [scalars[value], zero], [dest])
+                else:
+                    ir.emit('constflex', ('const', dest, value), [zero], [dest])
+                    ir.nodes[-1].append(('add_imm', dest, zero, value))
+                    scalars[value] = dest
+
+        raw = ir.load(sc(7))
+        root_original = ir.broadcast(raw)
+        original_reads = [ir.last[raw]]
+        source = {k: raw+k for k in range(7)}
+        for off in range(0, 504, 8):
+            data = ir.load(sc(14+off))
+            original_reads.append(ir.last[data])
+            source.update({7+off+k: data+k for k in range(8)})
+
+        tree = []
+        for k in range(7):
+            enc = ir.scalar('^', source[k], sc(0xb55a4f09))
+            tree.append(ir.broadcast(enc))
+        for depth in (1, 2):
+            base = (1 << depth)-1
+            tree[base:base+(1 << depth)] = reversed(tree[base:base+(1 << depth)])
+        diffs = {}
+        for depth in (1, 2):
+            base = (1 << depth)-1
+            for k in range(1 << (depth-1)):
+                diffs[base+2*k] = op('-', tree[base+2*k+1], tree[base+2*k])
+
+        values = [ir.load(sc(2310+8*g)) for g in range(32)]
+        input_reads = [ir.last[v] for v in values]
+        image_stores = {}
+        for block, fields in block_fields.items():
+            for off, (kind, value) in fields.items():
+                if kind == 'tree':
+                    dest = image[block]+off
+                    ir.emit('alu', ('^', dest, source[value], sc(0xb55a4f09)),
+                            [source[value], sc(0xb55a4f09)], [dest])
+            # Payload-free fields can contain any scratch bits. They are never
+            # observed by the kernel; table writes precede their output stores.
+            ir.extra_deps = [original_reads[(block-6)//8]] if block < 518 else [input_reads[(block-2310)//8]]
+            ir.context = (0, 0) if block >= 2310 else None
+            image_stores[block] = ir.store(sc(block), image[block])
+            ir.context = None
+            ir.extra_deps = []
+
+        record_deps = {depth: [image_stores[b] for b in depth_blocks[depth]] for depth in (3, 5, 7)}
+        table_reads = defaultdict(list)
+        nbuf = int(os.getenv('ANCHOR_BUFFERS', '2'))
+        staging = [[sc(2054+8*j+k) for k in range(8)] for j in range(nbuf)]
+        last_pack = [None]*nbuf
+        final_values = []
+        for g, v in enumerate(values):
+            bits = []
+            ptr3 = ptr5 = ptr7 = ptr9 = None
+            children = anchor = None
+            for r in range(16):
+                ir.context = (g, r)
+                depth = r % 11
+                if depth == 0:
+                    v = op('^', v, root_original if r == 0 else tree[0])
+                    bits = []
+                elif depth <= 2:
+                    nodes = tree[(1 << depth)-1:(1 << (depth+1))-1]
+                    for lev in range(depth):
+                        bit = bits[-1-lev]
+                        if lev == 0:
+                            base = (1 << depth)-1
+                            nodes = [ir.select(bit, nodes[2*k], nodes[2*k+1], diffs[base+2*k])
+                                     for k in range(len(nodes)//2)]
+                        else:
+                            nodes = [select(bit, nodes[2*k+1], nodes[2*k])
+                                     for k in range(len(nodes)//2)]
+                    v = op('^', v, nodes[0])
+                elif depth in (3, 5, 7):
+                    if depth == 3:
+                        ptr3 = mad(bits[2], select(bits[0], vc(X[1]), vc(X[0])),
+                                   select(bits[1], vc(Y[1]), vc(Y[0])))
+                        pointer = ptr3
+                    elif depth == 5:
+                        ptr5 = mad(bits[4], select(bits[3], vc(V[1]), vc(V[0])), ptr3)
+                        pointer = ptr5
                     else:
-                        bit=op('&',v,one); bits.append(bit)
-                        if depth==0: idx=bit
-                        elif depth==1: idx=mad(idx,two,bit)
-                        elif depth==2: idx=mad(idx,vc(6),choice(bit,vc(bases[3]+3),vc(bases[3])))
-                        elif depth in (3,5): idx=mad(idx,four,choice(bit,vc(-12),vc(-18)))
-                        elif depth in (4,6): idx=mad(bit,three,idx)
-                        elif depth==7: idx=mad(idx,vc(mul9),choice(bit,vc(bias9-2),vc(bias9)))
-                        elif depth==8: idx=op('-',idx,bit)
-                        elif depth==9: idx=mad(idx,two,choice(bit,vc(-6),vc(-5)))
-            ir.context=(g,rounds); v=op('^',v,hc[11]); ir.store(sc(7+n_nodes+batch_size+8*g),v)
-        self.instrs,self.scratch_ptr,self.counts=ir.compile(); self.schedule_cycles=ir.logical_cycles
-        if self.scratch_ptr>1536: raise RuntimeError('scratch peak '+str(self.scratch_ptr))
+                        digit = select(bits[5], select(bits[6], three, two), bits[6])
+                        ptr7 = mad(digit, four, anchor)
+                        pointer = ptr7
+                    ir.extra_deps = list(record_deps[depth])
+                    before = len(ir.nodes)
+                    if depth == 5:
+                        bi = g % nbuf
+                        if last_pack[bi] is not None:
+                            ir.extra_deps.append(last_pack[bi])
+                        v, children, anchor = ir.native_record(pointer, v, anchor_ptrs=staging[bi])
+                        last_pack[bi] = ir.last[anchor]
+                    else:
+                        v, children = ir.native_record(pointer, v)
+                    table_reads[depth].extend(i for i in range(before, len(ir.nodes))
+                                              if ir.nodes[i][0] == 'record')
+                    ir.extra_deps = []
+                elif depth in (4, 6, 8):
+                    v = ir.native_select(v, bits[-1], children)
+                elif depth == 9:
+                    digit = select(bits[8], select(bits[7], vc(1030), vc(1032)),
+                                   select(bits[7], vc(1029), vc(1031)))
+                    ptr9 = op('-', digit, ptr7)
+                    v = ir.gather_xor_word(ptr9, v, offset=3)
+                else:
+                    pointer = mad(ptr9, two, bits[9])
+                    v = op('^', v, ir.gather(pointer))
+                v = hash_value(v, decode=r in (8, 9, 15))
+                if depth < 10 and r < 15:
+                    signed = depth in (2, 4)
+                    bits.append(op('|' if signed else '&', v, vc(0xfffffffe) if signed else one))
+            final_values.append(v)
 
-
-
+        for g, v in enumerate(final_values):
+            ir.context = (g, 16)
+            block = 2310+8*g
+            deps = []
+            for depth in (3, 5):
+                if block in depth_blocks[depth]:
+                    deps.extend(table_reads[depth])
+            ir.extra_deps = deps
+            ir.store(sc(block), v)
+            ir.extra_deps = []
+        self.instrs, self.scratch_ptr, self.counts = ir.compile()
+        self.schedule_cycles = ir.logical_cycles
+        if self.scratch_ptr > 1536:
+            raise RuntimeError('scratch peak '+str(self.scratch_ptr))
 
 
 BASELINE = 147734
