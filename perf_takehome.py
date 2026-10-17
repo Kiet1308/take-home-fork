@@ -269,9 +269,10 @@ class IR:
         n=self.nodes
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else 1)+max([n[j][4] for j in n[i][3]] or [0])
         bias=float(os.getenv('GROUP_BIAS','7')); tbias=float(os.getenv('TAIL_GROUP_BIAS','4')); toff=float(os.getenv('TAIL_OFFSET','100'))
+        round_offsets={15:8}; group_offsets={8:16,19:4}
         def score(i):
             ctx=n[i][5]
-            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias) if ctx else -n[i][4]
+            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
@@ -561,6 +562,7 @@ class KernelBuilder:
                 ir.store(sc(7+n_nodes+batch_size+8*g),dest)
         self.instrs,self.scratch_ptr,self.counts=ir.compile(); self.schedule_cycles=ir.logical_cycles
         if self.scratch_ptr>1536: raise RuntimeError('scratch peak '+str(self.scratch_ptr))
+
 
 
 
