@@ -269,6 +269,18 @@ class IR:
         mapping={i:j for j,i in enumerate(sorted(reachable))}
         self.nodes=[[v[0],v[1],[mapping[i] for i in v[2]],[mapping[i] for i in v[3] if i in mapping],v[4],v[5],v[6],v[7],*v[8:]] for j,v in enumerate(self.nodes) if j in reachable]
         n=self.nodes
+        constant_sources=[(v[1][2]&0xffffffff,v[1][1],i) for i,v in enumerate(n) if v[0]=='constflex']
+        constant_sources.append((0,self.const_zero,None))
+        wanted={v[1][2]&0xffffffff for v in n if v[0]=='constflex'}; recipes=defaultdict(list)
+        if int(os.getenv('CONST_ALU_CYCLES','8')):
+            for va,a,ia in constant_sources:
+                for vb,b,ib in constant_sources:
+                    pairs=[('+',(va+vb)&0xffffffff),('-',(va-vb)&0xffffffff),('^',va^vb),('&',va&vb),('|',va|vb),('*',(va*vb)&0xffffffff),('==',int(va==vb)),('<',int(va<vb))]
+                    if vb<32: pairs.extend([('<<',(va<<vb)&0xffffffff),('>>',va>>vb)])
+                    if vb: pairs.extend([('//',va//vb),('%',va%vb)])
+                    for op,result in pairs:
+                        if result in wanted: recipes[result].append((op,a,b,ia,ib))
+        completed=[False]*len(n)
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else 1)+max([n[j][4] for j in n[i][3]] or [0])
         bias=float(os.getenv('GROUP_BIAS','7')); tbias=float(os.getenv('TAIL_GROUP_BIAS','4')); toff=float(os.getenv('TAIL_OFFSET','100'))
         round_offsets={15:8}; group_offsets={8:16,19:4}
@@ -283,6 +295,18 @@ class IR:
             bundle={}; chosen=[]; used=set(); target=pending_lookup
             if target is not None:
                 pending_lookup=None; bundle['lookup_target']=n[target][1][1]; chosen.append(target); used.add(target)
+            pre_alu=0
+            if target is None and len(ins)<int(os.getenv('CONST_ALU_CYCLES','8')):
+                remove=set()
+                for _,i in sorted(ready['constflex']):
+                    d=n[i][1][1]; val=n[i][1][2]&0xffffffff
+                    recipe=next((t for t in recipes[val] if (t[3] is None or completed[t[3]]) and (t[4] is None or completed[t[4]])),None)
+                    if recipe is None: continue
+                    op,a,b,_,_=recipe; bundle.setdefault('alu',[]).append((op,d,a,b)); pre_alu+=1
+                    n[i][6].extend([a,b]); chosen.append(i); used.add(i); remove.add(i)
+                    if pre_alu==SLOT_LIMITS['alu']: break
+                if remove:
+                    ready['constflex']=[t for t in ready['constflex'] if t[1] not in remove]; heapq.heapify(ready['constflex'])
             def take(e,i):
                 bundle.setdefault(e,[]).append(n[i][8] if (n[i][0]=='select' and e=='valu') or (n[i][0] in ('constflex','flowalu') and e=='flow') else n[i][1]); chosen.append(i); used.add(i)
             for e in ('load','store','flow'):
@@ -302,7 +326,7 @@ class IR:
                 if not pools: break
                 p=min(pools,key=lambda p:(ready[p][0][0]+(float(os.getenv('FLOW_PREFERENCE','32')) if p=='select' else 0),ready[p][0][1]))
                 _,i=heapq.heappop(ready[p]); take('valu',i)
-            limit=0 if target is not None else SLOT_LIMITS['alu']
+            limit=0 if target is not None else SLOT_LIMITS['alu']-pre_alu
             while partial and limit:
                 i,k=partial[0]; s=n[i][1]; used.add(i)
                 bundle.setdefault('alu',[]).append((s[0],s[1]+k,s[2]+k,s[3]+k)); limit-=1; k+=1
@@ -318,6 +342,7 @@ class IR:
                     else: partial.append((i,limit)); limit=0
             ins.append(bundle); usage.append(used)
             for i in chosen:
+                completed[i]=True
                 for j in n[i][3]:
                     pending[j]-=1
                     if not pending[j]: heapq.heappush(ready[n[j][0]],(score(j),j))
@@ -405,11 +430,18 @@ class KernelBuilder:
     def debug_info(self): return DebugInfo({})
     def build_kernel(self,forest_height,n_nodes,batch_size,rounds):
         ir=IR(); self.ir=ir
-        scalars={}; vectors={}
+        scalars={}; vectors={}; addr_scalars={}; lanes=None
         def sc0(x):
+            nonlocal lanes
+            if os.getenv('ALU_RANGE','1')=='1' and lanes is None and 0<=x<=8:
+                lanes=ir.new(); z=ir.const(0); scalars[0]=z
+                recipe=[('+',z,z),('==',z,z),('+',lanes+1,lanes+1),('+',lanes+1,lanes+2),('+',lanes+2,lanes+2),('+',lanes+1,lanes+4),('+',lanes+3,lanes+3),('+',lanes+3,lanes+4)]
+                for k,(opname,a,b) in enumerate(recipe):
+                    ir.emit('alu',(opname,lanes+k,a,b),[a,b],[lanes+k])
+                    if k: scalars[k]=lanes+k
+                scalars[8]=ir.scalar('+',lanes+4,lanes+4)
             if x not in scalars: scalars[x]=ir.const(x)
             return scalars[x]
-        addr_scalars={}; lanes=None
         def sc(x):
             nonlocal lanes
             mode=int(os.getenv('VECTOR_ADDR','1'))
@@ -459,7 +491,7 @@ class KernelBuilder:
             original_reads=set(ir.last[raw+k] for k in range(32))
             sources=[]
             for level in range(5,mirror_max+1):
-                for off in range(0,1<<level,8):
+                for off in [j for pair in zip(range(0,(1<<level)//2,8),range((1<<level)-8,(1<<level)//2-1,-8)) for j in pair]:
                     data=ir.load(sc((1<<level)+6+off))
                     sources.append((level,off,data))
                     original_reads.add(ir.last[data])
