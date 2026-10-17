@@ -227,18 +227,33 @@ class IR:
         self.stage_last[key]=self.last[out]
         self.extra_deps=inherited; self.context=ctx
         return out
+    def memory_pair(self,a,b,pointers):
+        inherited=list(getattr(self,'extra_deps',[])); ctx=self.context
+        self.context=None
+        key=tuple(pointers); previous=getattr(self,'stage_last',{}).get(key)
+        self.extra_deps=inherited+([previous] if previous is not None else [])
+        stores=[]
+        for lane,pointer in enumerate(pointers):
+            src=b if lane%2 else a
+            self.emit('store',('store',pointer,src),[pointer,src],[])
+            stores.append(len(self.nodes)-1)
+        self.extra_deps=inherited+stores
+        packed=self.new(10)+1
+        self.emit('load',('vload',packed,pointers[0]),[pointers[0]],range(packed,packed+8))
+        if not hasattr(self,'stage_last'): self.stage_last={}
+        self.stage_last[key]=self.last[packed]
+        self.extra_deps=inherited; self.context=ctx
+        outs=[]
+        for parity in (0,1):
+            out=self.new(); outs.append(out)
+            self.emit('flow',('vselect',out,self.pair_mask,packed+parity,packed+parity-1),list(range(self.pair_mask,self.pair_mask+8))+list(range(packed+parity,packed+8,2)),range(out,out+8))
+        return outs
     def bootstrap_pair_mask(self,pattern,a,zero):
-        # The owner is reserved from program start. Odd mask words retain the
-        # machine's initial zero; only the four selected even words are live.
+        # Four already-needed nonzero constants occupy the even mask words.
+        # Its fixed owner preserves the machine's initial zero in odd words.
         assert self.owner[pattern] in self.fixed
-        for k in (2,4,6):
-            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',
-                      ('+',pattern+k,a,zero),[a,zero],[pattern+k])
-        out=self.new()
-        self.emit('flow',('vselect',out,pattern,pattern,pattern-1),
-                  range(pattern,pattern+8),range(out,out+8))
         self.pair_mask=pattern
-        return out
+        return self.broadcast(a)
     def pair_broadcast(self,pattern):
         zero=self.const_zero
         for k in range(2,8):
@@ -518,7 +533,7 @@ class IR:
             pin=(-10000 if n[i][0]=='constflex' and n[i][1][2] in ((0x7ed55d16,0xc761c23c) if os.getenv('BOOT_SYNTH', '1')=='1' else (4097,0x7ed55d16)) and os.getenv('BOOT_PIN', '0')=='1' else 0)
             if n[i][0]=='load' and n[i][1][0]=='vload' and n[i][1][2]==self.const_zero: pin-=20000
             extra=pin+engine_offsets.get(n[i][0],0)+(context_offsets.get(str(ctx[0])+','+str(ctx[1]),0) if ctx else 0)
-            return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-150')))
+            return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-25')))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record','pairalu']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
@@ -720,13 +735,15 @@ class KernelBuilder:
         mem_constants=(0xb55a4f09,-60,-40,2310,2430,4,16,1031,1032,1029,1030)
         mem_bits=int(os.getenv('MEM_BCAST_MASK', '90284'),0)
         mem_values={x&0xffffffff for j,x in enumerate(mem_constants) if mem_bits>>j&1}
+        memory_pairs={x:(0xe9f8cc1d,9) for x in (0xe9f8cc1d,9)}
         single_constants=mem_constants+(4097,0x7ed55d16,19,0xc761c23c,33,16896,0xe9f8cc1d,0xaccf6200,9,0xfd7046c5,0xfffffffe,1,3)
         # Bits0..16 match MEM_BCAST_MASK; 11..16 are cached nodes1..6.
         single_items=list(enumerate(mem_constants))+list(enumerate(single_constants[11:],17))
-        single_bits=int(os.getenv('SINGLE_BCAST_MASK', '107610947'),0)
+        single_bits=int(os.getenv('SINGLE_BCAST_MASK', '107611987'),0)
         single_values={x&0xffffffff for j,x in single_items if single_bits>>j&1} - mem_values
         if os.getenv('BOOT_CRITICAL', '1')=='1':
             single_values -= {4097,0x7ed55d16,19,0xc761c23c,16}
+        single_values-=memory_pairs.keys()
         pair_bits=int(os.getenv('PAIR_MASK', '842'),0)
         if os.getenv('BOOT_CRITICAL', '1')=='1': pair_bits &= ~12
         if os.getenv('BOOT_SYNTH', '1')=='1': pair_bits &= ~125
@@ -739,7 +756,6 @@ class KernelBuilder:
         if pair_bits or single_bits or os.getenv('BOOT_ONES', '1')=='1':
             mask_owner=ir.new(9); mask_pattern=mask_owner+1
             ir.fixed={mask_owner:1}
-            destinations[2]=mask_pattern
             for j,pair in enumerate(pair_values):
                 if not(pair_bits>>j&1):continue
                 a,b=(v&0xffffffff for v in pair); pattern=ir.new(10)+1
@@ -748,6 +764,8 @@ class KernelBuilder:
             for x in sorted(single_values):
                 pattern=ir.new(9)+1
                 single_patterns[x]=pattern; destinations[x]=pattern
+            for k,x in enumerate((4097,0x7ed55d16,0xc761c23c,0xe9f8cc1d)):
+                destinations[x]=mask_pattern+2*k
 
         header=None; header_values={16:0,2047:1,256:2,10:3,7:4,2054:5,2310:6}
         def sc(x):
@@ -773,19 +791,21 @@ class KernelBuilder:
                 ir.context=ctx
             return staging
 
-        def memory_broadcast(a):
+        def memory_broadcast(a,b=None):
             nonlocal mem_broadcast_count
             buffers=get_staging()
             rotation=int(os.getenv('MEM_BCAST_ROTATION', '1'))
             step=int(os.getenv('MEM_BCAST_STEP', '1'))
             pointers=buffers[(rotation+step*mem_broadcast_count)%nbuf]
             mem_broadcast_count+=1
-            return ir.memory_broadcast(a,pointers)
+            return ir.memory_pair(a,b,pointers) if b is not None else ir.memory_broadcast(a,pointers)
 
         def vc(x):
             x &= 0xffffffff
             if x not in vectors:
-                if x in mem_values:
+                if x in memory_pairs:
+                    a,b=memory_pairs[x]; vectors[a],vectors[b]=memory_broadcast(sc(a),b=sc(b))
+                elif x in mem_values:
                     vectors[x]=memory_broadcast(sc(x))
                 elif (pair_bits or single_bits) and x==2:
                     vectors[x]=ir.bootstrap_pair_mask(mask_pattern,sc(x),sc(0))
@@ -799,6 +819,10 @@ class KernelBuilder:
             return vectors[x]
 
         def op(name, *args):
+            if name=='|' and vectors.get(0xfffffffe)==args[1]:
+                out=ir.new(); a=args[0]; b=sc(0xfffffffe)
+                for lane in range(8): ir.emit('alu',(name,out+lane,a+lane,b),[a+lane,b],[out+lane])
+                return out
             return ir.op(name, *args)
 
         def mad(a, b, c):
@@ -816,20 +840,20 @@ class KernelBuilder:
             ir.zero_read=len(ir.nodes)-1
             scalars[1]=oneboot; vectors[1]=oneboot
             ir.known_values[oneboot]=1
+        for value in (4097,0x7ed55d16,0xc761c23c,0xe9f8cc1d): sc(value)
         if os.getenv('BOOT_SYNTH', '1')=='1':
             assert os.getenv('BOOT_ONES', '1')=='1'
             vectors[16]=ir.broadcast(header)
             vectors[256]=ir.broadcast(header+2)
             vectors[2]=op('+',oneboot,oneboot)
+            scalars[2]=vectors[2]; ir.known_values[vectors[2]]=2
+            ir.bootstrap_pair_mask(mask_pattern,sc(2),zero)
             vectors[3]=op('+',vectors[2],oneboot)
             vectors[4]=op('+',vectors[2],vectors[2])
-            vectors[9]=op('*',vectors[3],vectors[3])
+            vectors[9]=vc(9)
             vectors[19]=op('+',vectors[16],vectors[3])
-            vectors[4097]=mad(vectors[16],vectors[256],oneboot)
+            vectors[4097]=vc(4097)
             vectors[33]=mad(vectors[16],vectors[2],oneboot)
-            # The uniform 2 vector exists already. Only the sparse mask stores
-            # remain live from this helper; its redundant vselect is removed.
-            ir.bootstrap_pair_mask(mask_pattern,sc(2),zero)
             for value in (3,4,9,19,4097,33):
                 scalars[value]=vectors[value]
                 ir.known_values[vectors[value]]=value
@@ -908,13 +932,28 @@ class KernelBuilder:
             source.update({7+off+k: data+k for k in range(8)})
 
         tree = []
+        tree_pairs={}
+        for a,b in [(5,6)]:
+            assert 1<=a<=6 and 1<=b<=6 and a!=b and a not in tree_pairs and b not in tree_pairs
+            tree_pairs[a]=tree_pairs[b]=(a,b)
+        tree_pair_vectors={}
         for k in range(7):
-            if 1<=k<=6 and single_bits>>(10+k)&1 and not mem_bits>>(10+k)&1:
+            if k in tree_pairs:
+                if k not in tree_pair_vectors:
+                    a,b=tree_pairs[k]
+                    encs=[]
+                    for n in (a,b):
+                        encs.append(ir.scalar('^',source[n],sc(0xb55a4f09)))
+                        ir.nodes[-1][0]='pairalu'
+                    tree_pair_vectors[a],tree_pair_vectors[b]=memory_broadcast(encs[0],b=encs[1])
+                tree.append(tree_pair_vectors[k])
+            elif 1<=k<=6 and single_bits>>(10+k)&1 and not mem_bits>>(10+k)&1:
                 pattern=ir.new(9)+1
                 ir.emit('alu',('^',pattern,source[k],sc(0xb55a4f09)),[source[k],sc(0xb55a4f09)],[pattern])
                 tree.append(ir.single_broadcast(pattern))
             else:
                 enc = ir.scalar('^', source[k], sc(0xb55a4f09))
+                if 1<=k<=6: ir.nodes[-1][0]='pairalu'
                 if 1<=k<=6 and mem_bits>>(10+k)&1:
                     tree.append(memory_broadcast(enc))
                 else: tree.append(enc if k==0 and root_mask&2 else ir.broadcast(enc))
