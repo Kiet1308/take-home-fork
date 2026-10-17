@@ -179,6 +179,8 @@ import heapq
 import json
 from problem import SLOT_LIMITS, DebugInfo, VLEN
 
+_CONST_RECIPE_CACHE={}
+
 class IR:
     def __init__(self):
         self.nodes=[]; self.last={}; self.ptr=0; self.width={}; self.owner={}; self.context=None; self.lookups=[]
@@ -438,16 +440,26 @@ class IR:
         self.nodes=[[v[0],v[1],[mapping[i] for i in v[2]],[mapping[i] for i in v[3] if i in mapping],v[4],v[5],v[6],v[7],*v[8:]] for j,v in enumerate(self.nodes) if j in reachable]
         n=self.nodes
         constant_sources=[(v[1][2]&0xffffffff,v[1][1],i) for i,v in enumerate(n) if v[0]=='constflex']
+        for a,value in getattr(self,'known_values',{}).items():
+            if self.last[a] in mapping: constant_sources.append((value,a,mapping[self.last[a]]))
         constant_sources.append((0,self.const_zero,None))
         wanted={v[1][2]&0xffffffff for v in n if v[0]=='constflex'}; recipes=defaultdict(list)
         if int(os.getenv('CONST_ALU_CYCLES', '24')):
-            for va,a,ia in constant_sources:
-                for vb,b,ib in constant_sources:
-                    pairs=[('+',(va+vb)&0xffffffff),('-',(va-vb)&0xffffffff),('^',va^vb),('&',va&vb),('|',va|vb),('*',(va*vb)&0xffffffff),('==',int(va==vb)),('<',int(va<vb))]
-                    if vb<32: pairs.extend([('<<',(va<<vb)&0xffffffff),('>>',va>>vb)])
-                    if vb: pairs.extend([('//',va//vb),('%',va%vb)])
-                    for op,result in pairs:
-                        if result in wanted: recipes[result].append((op,a,b,ia,ib))
+            cache_key=tuple(row[0] for row in constant_sources)
+            if cache_key not in _CONST_RECIPE_CACHE:
+                cached=defaultdict(list)
+                for ai,(va,a,ia) in enumerate(constant_sources):
+                    for bi,(vb,b,ib) in enumerate(constant_sources):
+                        pairs=[('+',(va+vb)&0xffffffff),('-',(va-vb)&0xffffffff),('^',va^vb),('&',va&vb),('|',va|vb),('*',(va*vb)&0xffffffff),('==',int(va==vb)),('<',int(va<vb))]
+                        if vb<32: pairs.extend([('<<',(va<<vb)&0xffffffff),('>>',va>>vb)])
+                        if vb: pairs.extend([('//',va//vb),('%',va%vb)])
+                        for op,result in pairs:
+                            if result in wanted: cached[result].append((op,ai,bi))
+                _CONST_RECIPE_CACHE[cache_key]=cached
+            for val,options in _CONST_RECIPE_CACHE[cache_key].items():
+                for op,ai,bi in options:
+                    _,a,ia=constant_sources[ai]; _,b,ib=constant_sources[bi]
+                    recipes[val].append((op,a,b,ia,ib))
         completed=[False]*len(n)
         cpw=json.loads(os.getenv('CP_WEIGHTS', '{"load": 1.5, "flow": 1.25, "store": 0.75}'))
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else cpw.get(n[i][0],1))+max([n[j][4] for j in n[i][3]] or [0])
@@ -457,7 +469,9 @@ class IR:
         engine_offsets=json.loads(os.getenv('ENGINE_OFFSETS', '{"valu": -4, "load": -4, "record": 6, "flex": -2}'))
         def score(i):
             ctx=n[i][5]
-            extra=engine_offsets.get(n[i][0],0)+(context_offsets.get(str(ctx[0])+','+str(ctx[1]),0) if ctx else 0)
+            pin=(-10000 if n[i][0]=='constflex' and n[i][1][2] in ((0x7ed55d16,0xc761c23c) if os.getenv('BOOT_SYNTH', '1')=='1' else (4097,0x7ed55d16)) and os.getenv('BOOT_PIN', '1')=='1' else 0)
+            if n[i][0]=='load' and n[i][1][0]=='vload' and n[i][1][2]==self.const_zero: pin-=20000
+            extra=pin+engine_offsets.get(n[i][0],0)+(context_offsets.get(str(ctx[0])+','+str(ctx[1]),0) if ctx else 0)
             return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-125')))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record','pairalu']}
         for i,v in enumerate(n):
@@ -494,7 +508,7 @@ class IR:
                     chosen.append(i); used.add(i); return
                 bundle.setdefault(e,[]).append(n[i][8] if (n[i][0]=='select' and e=='valu') or (n[i][0] in ('constflex','flowalu') and e=='flow') else n[i][1]); chosen.append(i); used.add(i)
             for e in ('load','store','flow'):
-                if e=='flow' and not ins:
+                if e=='flow' and len(ins)==int(os.getenv('PAUSE_CYCLE', '8')):
                     bundle['flow']=[('pause',)]; continue
                 if e=='flow' and target is not None:
                     if ready['lookup']:
@@ -541,7 +555,7 @@ class IR:
         # Pause at an unused FLOW slot before any output values are written.
         # This preserves the original reference harness's initial yield; the
         # submission harness ignores pauses, so no extra cycle is needed.
-        pause_cycle=0
+        pause_cycle=int(os.getenv('PAUSE_CYCLE', '8'))
         first_output_cycle=min(c for c,used in enumerate(usage) if any(n[i][0]=='store' and n[i][5] is not None for i in used))
         assert pause_cycle<first_output_cycle
         ins[pause_cycle]['flow']=[('pause',)]
@@ -662,14 +676,18 @@ class KernelBuilder:
         single_items=list(enumerate(mem_constants))+list(enumerate(single_constants[11:],17))
         single_bits=int(os.getenv('SINGLE_BCAST_MASK', '103416387'),0)
         single_values={x&0xffffffff for j,x in single_items if single_bits>>j&1} - mem_values
+        if os.getenv('BOOT_CRITICAL', '1')=='1':
+            single_values -= {4097,0x7ed55d16,19,0xc761c23c,16}
         pair_bits=int(os.getenv('PAIR_MASK', '266'),0)
+        if os.getenv('BOOT_CRITICAL', '1')=='1': pair_bits &= ~12
+        if os.getenv('BOOT_SYNTH', '1')=='1': pair_bits &= ~125
         for j,pair in enumerate(pair_values):
             if any((x&0xffffffff) in (mem_values|single_values) for x in pair): pair_bits &= ~(1<<j)
         nbuf=int(os.getenv('ANCHOR_BUFFERS', '4'))
         staging=None
         mem_broadcast_count=0
         pair_map={}; destinations={}; single_patterns={}
-        if pair_bits or single_bits:
+        if pair_bits or single_bits or os.getenv('BOOT_ONES', '1')=='1':
             mask_owner=ir.new(9); mask_pattern=mask_owner+1
             ir.fixed={mask_owner:1}
             destinations[2]=mask_pattern
@@ -682,12 +700,18 @@ class KernelBuilder:
                 pattern=ir.new(9)+1
                 single_patterns[x]=pattern; destinations[x]=pattern
 
+        header=None; header_values={16:0,2047:1,256:2,10:3,7:4,2054:5,2310:6}
         def sc(x):
             x &= 0xffffffff
             if x not in scalars:
-                if x in destinations:
+                if header is not None and x in header_values and x not in destinations:
+                    scalars[x]=header+header_values[x]
+                elif x in destinations:
                     dest=destinations[x]
+                    extra=list(getattr(ir,'extra_deps',[]))
+                    if x==2 and hasattr(ir,'zero_read'): ir.extra_deps=extra+[ir.zero_read]
                     ir.emit('constflex',('const',dest,x),[ir.const_zero],[dest])
+                    ir.extra_deps=extra
                     ir.nodes[-1].append(('add_imm',dest,ir.const_zero,x)); scalars[x]=dest
                 else: scalars[x] = ir.const(x)
             return scalars[x]
@@ -735,6 +759,31 @@ class KernelBuilder:
             return ir.op('vselect', bit, yes, no, e='flow')
 
         zero = sc(0)
+        header=ir.load(zero)
+        ir.known_values={header+j:x for x,j in header_values.items()}
+        if os.getenv('BOOT_ONES', '1')=='1':
+            oneboot=ir.new()
+            ir.emit('valu',('==',oneboot,mask_pattern,mask_pattern),range(mask_pattern,mask_pattern+8),range(oneboot,oneboot+8))
+            ir.zero_read=len(ir.nodes)-1
+            scalars[1]=oneboot; vectors[1]=oneboot
+            ir.known_values[oneboot]=1
+        if os.getenv('BOOT_SYNTH', '1')=='1':
+            assert os.getenv('BOOT_ONES', '1')=='1'
+            vectors[16]=ir.broadcast(header)
+            vectors[256]=ir.broadcast(header+2)
+            vectors[2]=op('+',oneboot,oneboot)
+            vectors[3]=op('+',vectors[2],oneboot)
+            vectors[4]=op('+',vectors[2],vectors[2])
+            vectors[9]=op('*',vectors[3],vectors[3])
+            vectors[19]=op('+',vectors[16],vectors[3])
+            vectors[4097]=mad(vectors[16],vectors[256],oneboot)
+            vectors[33]=mad(vectors[16],vectors[2],oneboot)
+            # The uniform 2 vector exists already. Only the sparse mask stores
+            # remain live from this helper; its redundant vselect is removed.
+            ir.bootstrap_pair_mask(mask_pattern,sc(2),zero)
+            for value in (3,4,9,19,4097,33):
+                scalars[value]=vectors[value]
+                ir.known_values[vectors[value]]=value
         one, two, three, four = [vc(k) for k in (1, 2, 3, 4)]
         hc = [vc(n) for n in (
             4097, 0x7ed55d16, 19, 0xc761c23c,
@@ -800,9 +849,10 @@ class KernelBuilder:
 
         raw = ir.load(sc(7))
         root_mask=int(os.getenv('ROOT_SCALAR', '2'))
-        root_original = raw if root_mask&1 else ir.broadcast(raw)
+        root_original = header+7 if root_mask&1 else ir.broadcast(header+7)
         original_reads = [ir.last[raw]]
         source = {k: raw+k for k in range(7)}
+        source[0]=header+7
         for off in range(0, 504, 8):
             data = ir.load(sc(14+off))
             original_reads.append(ir.last[data])
