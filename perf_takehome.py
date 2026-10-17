@@ -268,7 +268,7 @@ class IR:
         self.nodes=[[v[0],v[1],[mapping[i] for i in v[2]],[mapping[i] for i in v[3] if i in mapping],v[4],v[5],v[6],v[7],*v[8:]] for j,v in enumerate(self.nodes) if j in reachable]
         n=self.nodes
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else 1)+max([n[j][4] for j in n[i][3]] or [0])
-        bias=float(os.getenv('GROUP_BIAS','7')); tbias=float(os.getenv('TAIL_GROUP_BIAS','5')); toff=float(os.getenv('TAIL_OFFSET','60'))
+        bias=float(os.getenv('GROUP_BIAS','7')); tbias=float(os.getenv('TAIL_GROUP_BIAS','4')); toff=float(os.getenv('TAIL_OFFSET','100'))
         def score(i):
             ctx=n[i][5]
             return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias) if ctx else -n[i][4]
@@ -394,9 +394,27 @@ class KernelBuilder:
     def build_kernel(self,forest_height,n_nodes,batch_size,rounds):
         ir=IR(); self.ir=ir
         scalars={}; vectors={}
-        def sc(x):
+        def sc0(x):
             if x not in scalars: scalars[x]=ir.const(x)
             return scalars[x]
+        addr_scalars={}; lanes=None
+        def sc(x):
+            nonlocal lanes
+            mode=int(os.getenv('VECTOR_ADDR','1'))
+            valuebase=7+n_nodes+batch_size
+            kind=1 if mode&1 and valuebase<=x<valuebase+batch_size and (x-valuebase)%8==0 else 2 if mode&2 and 38<=x<262 and x%8==6 else 4 if mode&4 and 7<=x<=31 and x%8==7 else 0
+            if not kind: return sc0(x)
+            if x not in addr_scalars:
+                if lanes is None:
+                    lanes=ir.new()
+                    for k in range(8): ir.emit('alu',('+',lanes+k,sc0(k),sc0(0)),[sc0(k),sc0(0)],[lanes+k])
+                origin=valuebase if kind==1 else 38 if kind==2 else 7
+                base=origin+64*((x-origin)//64)
+                if os.getenv('VECTOR_ADDR_INC','1')=='1' and base-64 in addr_scalars:
+                    vaddr=op('+',addr_scalars[base-64],vc(64))
+                else: vaddr=mad(lanes,vc(8),ir.broadcast(sc0(base)))
+                for k in range(8): addr_scalars[base+8*k]=vaddr+k
+            return addr_scalars[x]
         def vc(x):
             if x not in vectors: vectors[x]=ir.broadcast(sc(x))
             return vectors[x]
@@ -420,11 +438,28 @@ class KernelBuilder:
             base=(1<<depth)-1
             for k in range(1<<(depth-1)): diffs[base+2*k]=op('-',tree[base+2*k+1],tree[base+2*k])
         transformed={}
-        for level in range(5,int(os.getenv('TRANSFORM_DEPTH','7'))+1):
-            transformed[level]=[]; p=sc(7+(1<<level)-1)
-            for off in range(0,1<<level,8):
-                data=ir.load(p); data=op('^',data,hc[11]); transformed[level].append(ir.store(p,data))
-                if off+8<(1<<level): p=ir.add_imm(p,8) if os.getenv('TRANSFORM_PTR','const')=='flow' else sc(7+(1<<level)-1+off+8)
+        mirror_max=min(forest_height,int(os.getenv('TRANSFORM_DEPTH','7')))
+        if mirror_max>=5:
+            # Mirror levels 5..mirror_max and relocate them from physical base
+            # 7 to base 3. The destination of source offset j at depth d is
+            # 2**(d+1)+1-j. Read the whole source region before storing: the
+            # four-word relocation also overlaps the preceding level/cache.
+            original_reads=set(ir.last[raw+k] for k in range(32))
+            sources=[]
+            for level in range(5,mirror_max+1):
+                for off in range(0,1<<level,8):
+                    data=ir.load(sc((1<<level)+6+off))
+                    sources.append((level,off,data))
+                    original_reads.add(ir.last[data])
+            for level,off,data in sources:
+                out=ir.new()
+                for k in range(8):
+                    ir.emit('alu',('^',out+k,data+7-k,sc(0xB55A4F09)),
+                            [data+7-k,sc(0xB55A4F09)],[out+k])
+                ir.extra_deps=original_reads
+                token=ir.store(sc((1<<(level+1))-6-off),out)
+                ir.extra_deps=[]
+                transformed.setdefault(level,[]).append(token)
         vals=[ir.load(sc(7+n_nodes+batch_size+8*g)) for g in range(batch_size//8)]
         states=[None]*len(vals)
         for g,v in enumerate(vals):
@@ -454,17 +489,36 @@ class KernelBuilder:
                 v=op('^',mad(v,hc[4],hc[6]),mad(v,hc[5],hc[7]))
                 v=mad(v,hc[8],hc[9]); v=op('^',v,op('>>',v,hc[10]))
                 if r+1<rounds:
-                    if depth==forest_height: idx=zero; bits=[]
+                    if depth==forest_height:idx=zero;bits=[]
+                    elif mirror_max>=5 and 4<=depth<mirror_max:
+                        # In mirrored base-3 coordinates the next address is
+                        # 2*p - 2 + q. OR produces -2+q directly from the
+                        # encoded hash, removing the separate FLOW select.
+                        bias=op('|',v,vc(0xfffffffe))
+                        idx=mad(idx,two,bias)
                     else:
-                        bit=op('&',v,one); bits.append(bit)
-                        if depth==0: idx=bit
+                        bit=op('&',v,one);bits.append(bit)
+                        if depth==0:idx=bit
                         elif depth==3:
-                            bias=ir.op('vselect',bit,vc(36),vc(37),e='flow')
+                            if mirror_max>=5:
+                                # The cached depth-4 selection does not need
+                                # its address, so carry its mirrored base-3
+                                # address for the following gather instead.
+                                bias=ir.op('vselect',bit,vc(19),vc(18),e='flow')
+                                idx=mad(idx,two,bias)
+                            else:
+                                bias=ir.op('vselect',bit,vc(36),vc(37),e='flow')
+                                idx=mad(idx,vc((-2)&0xffffffff),bias)
+                        elif mirror_max>=5 and depth==mirror_max:
+                            # Return once to the original layout. The mirror
+                            # of heap index i at depth d is 3*2**d-3-i.
+                            c=6*(1<<depth)+9
+                            bias=ir.op('vselect',bit,vc(c-1),vc(c),e='flow')
                             idx=mad(idx,vc((-2)&0xffffffff),bias)
                         elif 4<=depth<forest_height:
                             bias=ir.op('vselect',bit,vc((-6)&0xffffffff),vc((-5)&0xffffffff),e='flow')
                             idx=mad(idx,two,bias)
-                        else: idx=mad(idx,two,bit)
+                        else:idx=mad(idx,two,bit)
             states[g]=v
         for g0 in range(0,len(vals),2):
             pair=[states[g0],states[g0+1]]; hist=[[],[]]; packed=None
