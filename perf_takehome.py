@@ -427,9 +427,55 @@ class IR:
         d=self.new()
         for k in range(8): self.emit('load',('load',d+k,p+k),[p+k],[d+k])
         return d
-    def store(self,p,v): self.emit('store',('vstore',p,v),[p]+list(range(v,v+8)),[]); return len(self.nodes)-1
+    def store(self,p,v,lanes=None):
+        reads = range(v,v+8) if lanes is None else [v+k for k in lanes]
+        self.emit('store',('vstore',p,v),[p]+list(reads),[])
+        return len(self.nodes)-1
     def add_imm(self,a,k):
         d=self.new(1); self.emit('flow',('add_imm',d,a,k),[a],[d]); return d
+    def allocate_calendar(self,n,usage,fixed,start,end,word_end):
+        """Keep vector bases contiguous while allocating each word's lifetime.
+
+        Record and image owners can acquire their fields in different cycles.
+        A word may share an address with an earlier value until its own first
+        write, even if another field of its owner is already live. Padding
+        that is never written or meaningfully read needs no reservation.
+        """
+        word_start={}
+        for cycle,used in enumerate(usage):
+            for i in used:
+                for a in n[i][7]:
+                    if a not in word_start: word_start[a]=cycle
+        for cycle,used in enumerate(usage):
+            for i in used:
+                for a in n[i][6]:
+                    if a==self.const_zero or self.owner[a] in fixed: continue
+                    assert a in word_start and word_start[a]<cycle, (a,cycle)
+        full=(1<<(len(usage)+1))-1
+        occupied=[0]*1536
+        occupied[0]=full
+        allocations=dict(fixed); peak=1
+        for a,p in fixed.items():
+            for k in range(self.width[a]): occupied[p+k]=full
+            peak=max(peak,p+self.width[a])
+        for a in sorted(start,key=lambda a:(start[a],-self.width[a],end[a],a)):
+            if a in fixed: continue
+            parts=[]
+            for k in range(self.width[a]):
+                word=a+k
+                if word in word_start:
+                    first=word_start[word]
+                    mask=((1<<(word_end[word]-first))-1)<<first
+                    parts.append((k,mask))
+            parts.sort(key=lambda item:item[1].bit_count(),reverse=True)
+            p=1
+            while True:
+                if p+self.width[a]>len(occupied): occupied.extend([0]*self.width[a])
+                if all(not(occupied[p+k]&mask) for k,mask in parts): break
+                p+=1
+            allocations[a]=p; peak=max(peak,p+self.width[a])
+            for k,mask in parts: occupied[p+k]|=mask
+        return allocations,peak
     def compile(self):
         reachable=set(); stack=[i for i,v in enumerate(self.nodes) if v[0]=='store']
         while stack:
@@ -570,41 +616,44 @@ class IR:
         # Fixed owners are reserved before cycle zero, so unwritten words in
         # them may rely on initial scratch zero. Never recycle their storage.
         fixed=getattr(self,'fixed',{})
-        allocations=dict(fixed); active=[]; free=[]; cursor=1
-        for a,p in sorted(fixed.items(),key=lambda item:item[1]):
-            assert p>=cursor,(a,p,cursor)
-            if p>cursor: free.append((cursor,p-cursor))
-            cursor=p+self.width[a]
-        free.append((cursor,100001-cursor)); peak=cursor if fixed else 0
-        def putfree(a,w):
-            free.append((a,w)); free.sort(); merged=[]
-            for p,s in free:
-                if merged and merged[-1][0]+merged[-1][1]==p: merged[-1]=(merged[-1][0],merged[-1][1]+s)
-                else: merged.append((p,s))
-            free[:]=merged
-        by_start=defaultdict(list)
-        for a,cyc in start.items():
-            if a not in fixed: by_start[cyc].append(a)
-        for cyc in range(len(ins)):
-            while active and active[0][0]<=cyc:
-                _,address,width=heapq.heappop(active); putfree(address,width)
-            order=os.getenv('ALLOC_ORDER', 'short')
-            def order_key(a):
-                if order=='long': return (-self.width[a],-end[a],a)
-                if order=='short': return (-self.width[a],end[a],a)
-                if order=='end': return (-end[a],-self.width[a],a)
-                return (-self.width[a],a)
-            for a in sorted(by_start[cyc],key=order_key):
-                w=self.width[a]
-                if os.getenv('ALLOC_POLICY','first')=='best':
-                    pos=min((j for j,(p,l) in enumerate(free) if l>=w),key=lambda j:(free[j][1],free[j][0]))
-                else: pos=next(j for j,(p,l) in enumerate(free) if l>=w)
-                p,l=free.pop(pos)
-                if l>w: free.insert(pos,(p+w,l-w))
-                allocations[a]=p; peak=max(peak,p+w)
-                if split_lifetimes:
-                    for k in range(w): heapq.heappush(active,(word_end.get(a+k,cyc+1),p+k,1))
-                else: heapq.heappush(active,(end[a],p,w))
+        if os.getenv('CALENDAR_ALLOC', '1')=='1':
+            allocations,peak=self.allocate_calendar(n,usage,fixed,start,end,word_end)
+        else:
+            allocations=dict(fixed); active=[]; free=[]; cursor=1
+            for a,p in sorted(fixed.items(),key=lambda item:item[1]):
+                assert p>=cursor,(a,p,cursor)
+                if p>cursor: free.append((cursor,p-cursor))
+                cursor=p+self.width[a]
+            free.append((cursor,100001-cursor)); peak=cursor if fixed else 0
+            def putfree(a,w):
+                free.append((a,w)); free.sort(); merged=[]
+                for p,s in free:
+                    if merged and merged[-1][0]+merged[-1][1]==p: merged[-1]=(merged[-1][0],merged[-1][1]+s)
+                    else: merged.append((p,s))
+                free[:]=merged
+            by_start=defaultdict(list)
+            for a,cyc in start.items():
+                if a not in fixed: by_start[cyc].append(a)
+            for cyc in range(len(ins)):
+                while active and active[0][0]<=cyc:
+                    _,address,width=heapq.heappop(active); putfree(address,width)
+                order=os.getenv('ALLOC_ORDER', 'short')
+                def order_key(a):
+                    if order=='long': return (-self.width[a],-end[a],a)
+                    if order=='short': return (-self.width[a],end[a],a)
+                    if order=='end': return (-end[a],-self.width[a],a)
+                    return (-self.width[a],a)
+                for a in sorted(by_start[cyc],key=order_key):
+                    w=self.width[a]
+                    if os.getenv('ALLOC_POLICY','first')=='best':
+                        pos=min((j for j,(p,l) in enumerate(free) if l>=w),key=lambda j:(free[j][1],free[j][0]))
+                    else: pos=next(j for j,(p,l) in enumerate(free) if l>=w)
+                    p,l=free.pop(pos)
+                    if l>w: free.insert(pos,(p+w,l-w))
+                    allocations[a]=p; peak=max(peak,p+w)
+                    if split_lifetimes:
+                        for k in range(w): heapq.heappush(active,(word_end.get(a+k,cyc+1),p+k,1))
+                    else: heapq.heappush(active,(end[a],p,w))
         def physical(a):
             if a==self.const_zero: return 0
             return allocations[self.owner[a]]+a-self.owner[a]
@@ -891,7 +940,7 @@ class KernelBuilder:
             # observed by the kernel; table writes precede their output stores.
             ir.extra_deps = [original_reads[(block-6)//8]] if block < 518 else [input_reads[(block-2310)//8]]
             ir.context = (0, 0) if block >= 2310 else None
-            image_stores[block] = ir.store(sc(block), image[block])
+            image_stores[block] = ir.store(sc(block), image[block], fields)
             ir.context = None
             ir.extra_deps = []
 
