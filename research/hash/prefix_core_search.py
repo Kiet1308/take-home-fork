@@ -11,7 +11,7 @@ import time
 import z3
 
 
-def solve(kind,timeout,samples,outer_free=False,fixes=None,combine='xor',first_free=False):
+def solve(kind,timeout,samples,outer_free=False,fixes=None,combine='xor',first_free=False,second_free=False,dependent=False):
     width=12
     m1,m2,m3,a,b,c,k,out=z3.BitVecs('m1 m2 m3 a b c k out',width)
     constants=[m1,m2,m3,a,b,c,k,out]
@@ -34,8 +34,17 @@ def solve(kind,timeout,samples,outer_free=False,fixes=None,combine='xor',first_f
         coefficient1=pick('co1',[m1]+src) if first_free else m1
         t=coefficient1*pick('s1',src)+pick('a1',[a]+src)
         if kind in ('two_mad','drop4'):
-            u=m2*pick('s2',src)+pick('a2',[b]+src)
-            d=t^u
+            src2=src+[t] if dependent else src
+            coefficient2=pick('co2',[m2]+src2) if second_free else m2
+            u=coefficient2*pick('s2',src2)+pick('a2',[b]+src2)
+            if combine=='xor':d=t^u
+            elif combine=='and':d=t&u
+            elif combine=='or':d=t|u
+            elif combine=='add':d=t+u
+            elif combine=='sub':d=t-u
+            elif combine=='rsub':d=u-t
+            elif combine=='mul':d=t*u
+            else:raise ValueError(combine)
             if kind=='two_mad':return d
             coeff=pick('co3',[m3]+src) if outer_free else m3
             return coeff*d+pick('a3',[c]+src+[t,u])
@@ -65,7 +74,7 @@ def solve(kind,timeout,samples,outer_free=False,fixes=None,combine='xor',first_f
     for name,lim in limits.items():solver.add(z3.ULT(selectors[name],lim))
     for name,value in (fixes or {}).items():solver.add(selectors[name]==value)
     # Canonical ordering removes the symmetry of the two XOR branches.
-    if kind in ('two_mad','drop4'):
+    if kind in ('two_mad','drop4') and not dependent and first_free==second_free and combine in ('xor','and','or','add','mul'):
         solver.add(z3.ULE(selectors['s1'],selectors['s2']))
     params=constants+list(selectors.values())
     for iteration in range(20):
@@ -75,7 +84,7 @@ def solve(kind,timeout,samples,outer_free=False,fixes=None,combine='xor',first_f
             xx,qq=z3.BitVecVal(xv,width),z3.BitVecVal(qv,width)
             solver.add(cand(xx,qq)^out==target(xx))
         res=solver.check()
-        print(json.dumps({'kind':kind,'combine':combine,'first_free':first_free,'outer_free':outer_free,'fixes':fixes,'result':str(res),'samples':len(seen),'seconds':round(time.monotonic()-start,3)}),flush=True)
+        print(json.dumps({'kind':kind,'combine':combine,'first_free':first_free,'second_free':second_free,'dependent':dependent,'outer_free':outer_free,'fixes':fixes,'result':str(res),'samples':len(seen),'seconds':round(time.monotonic()-start,3)}),flush=True)
         if res!=z3.sat:return
         model=solver.model();vals=[model.eval(p,model_completion=True).as_long() for p in params]
         print({str(p):hex(v) for p,v in zip(params,vals)},flush=True)
@@ -94,9 +103,11 @@ if __name__=='__main__':
     ap.add_argument('kind',choices=['two_mad','feed','drop4'])
     ap.add_argument('--outer_free',action='store_true')
     ap.add_argument('--first_free',action='store_true')
+    ap.add_argument('--second_free',action='store_true')
+    ap.add_argument('--dependent',action='store_true')
     ap.add_argument('--combine',choices=['xor','and','or','add','sub','rsub','mul'],default='xor')
     ap.add_argument('--timeout',type=int,default=60000)
     ap.add_argument('--samples',type=int,default=32)
     ap.add_argument('--fix',type=json.loads)
     args=ap.parse_args()
-    solve(args.kind,args.timeout,args.samples,args.outer_free,args.fix,args.combine,args.first_free)
+    solve(args.kind,args.timeout,args.samples,args.outer_free,args.fix,args.combine,args.first_free,args.second_free,args.dependent)

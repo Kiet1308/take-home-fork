@@ -109,7 +109,7 @@ The ordinary prefix already computes `a`, `q=a>>19`, `c=a XOR C1`, and `b=c XOR 
 
 Verified exclusions:
 
-- **Two MADs then XOR:** each MAD may use a free prefix source, arbitrary constant multiplier, and either a constant or free-prefix addend. `UNSAT` in 1.35s.
+- **Two general MADs then XOR/AND/OR:** both MADs may use free prefix words as multiplicands, constants or free words as addends, and the second MAD may additionally use the first result in any operand. All three final combiners are `UNSAT` on 56 pairs: XOR in 3.35s, AND in 0.89s, OR in 1.27s. Reproduce with `python prefix_core_search.py two_mad --first_free --second_free --dependent --combine xor` (and `and`/`or`). The narrower constant-coefficient XOR case was also independently excluded in 1.35s.
 - **Three-operation XOR feed:** `t=MAD(source,coefficient,addend); u=t XOR operand; result=MAD(u,coefficient,addend)`. The first coefficient may be constant or any free prefix word; the XOR operand may be a free word or constant; the final coefficient/addend may also use `t`. All selector splits are excluded, generally in under 2s. The constant-XOR/constant-final-coefficient case uses the quarter-increment invariant described below rather than a timeout being counted as a proof.
 - **C1-deleted four-operation core:** two MADs on the free `b/a/q` words, XOR, then MAD, targeting `G(b XOR C1)`. Both first addends and the final addend may use free words; the final addend may also use either MAD result; final multiplier may be constant or `b/a/q`. `UNSAT` in 53.9s with the latter freedom.
 - **AND/OR feed variants:** all variable-final-coefficient cases and all free-word middle operands are `UNSAT`, including variable first coefficients. Residual constant-middle-mask/constant-final-coefficient cases with a variable first coefficient are also `UNSAT` in under one second each. The remaining case with a constant first coefficient is excluded by the finite quarter-mask lemma below. Thus this entire stated selector family is excluded; the unsplit SMT timeouts were not themselves counted as proofs.
@@ -136,6 +136,34 @@ y = (even_m*d + even_C) XOR q
 with `even_m` divisible by two but not four, so `q` is directly the branch bit. If the preceding core is an odd triangular map of an ordinary first MAD/right-shear prefix, output bit1 must equal the first-prefix low bit up to a constant. Its derivative under input bit31 must therefore be constantly zero or constantly one, depending on the first shift. The reference `H1` derivative is zero at `x=0` and one at `x=1`; the derivative of `H1 XOR H0` is one at `x=0` and zero at `x=1`. Consequently the raw form and parity-source rank-one conjugacies (including the left-one shear) cannot implement this topology. More general input/output encodings are outside this obstruction. The exact two witnesses are checked by `rawnode_top2_witnesses.py`.
 
 A separate possible escape is `E(x)=x XOR (((x>>17)&1)*D)`, with `D0=0`, `D1=1`, `D17=0`. Its encoded output bit1 is `H1 XOR H17`, so the simple bit31 obstruction cancels. Nevertheless, all these encodings are excluded by `free_parity_encoding_influence.py`: the required first shift is 20, and its first-MAD bit20 must have coordinate0/1 influence counts 1,044,480 and 1,040,380. The first count permits only four multiplier residues modulo `2**21`; the second excludes every constant for all four. These exact counts are independent of the other bits of `D`, because this encoding leaves coordinate flips0 and1 unchanged. This proof also assumes the ordinary first MAD/right-shear prefix and a triangular middle core; it is not a statement about arbitrary ten-operation topologies.
+
+## 8. Different three-operation shift/MAD prefixes
+
+These results retain an arbitrary invertible triangular downstream core and a final right XOR shear, while replacing the ordinary first MAD/XOR/shear prefix. They do not assume the downstream core has the ordinary coefficients or even the ordinary three-MAD structure.
+
+First consider a bijective first affine word `a`, `q=a>>s`, with `1 <= s < w`. Put `B=2**s`, `N=2**w`.
+
+- `a+k*q` is a permutation exactly when `k` is divisible by `2**(s+1)`. For each fixed `q`, its inputs form a block of `B` consecutive values and its outputs form a cyclic interval of the same length, starting at `(B+k)*q`. A disjoint tiling of the circle by these intervals forces all starts to be congruent modulo `B`, hence `B` divides `k`. The resulting map of block indices multiplies by `1+k/B`, which must be odd. Such a prefix cannot mix the required high bit down to bit zero.
+- `a+q*q` is not a permutation. The same interval tiling would require `q*q` to be divisible by `B` for every `q`, which fails at `q=1`.
+- `a*(q+1)` has only `N/4` odd outputs, hence is not a permutation.
+- `k*a+q` is a permutation exactly when `v2(k)=w-s`. If `t=v2(k)>w-s`, the low `t` output bits cannot cover all residues. If `t<w-s`, fix `q mod 2**t`, divide out `2**t`, and multiply by the inverse of the odd part of `k`. The remaining inputs again map to intervals of length `B`, but consecutive starts differ by `B*2**t + odd`, contradicting the necessary interval tiling. Equality gives a bijection because `q` supplies the low `t` bits and the block remainder is multiplied by an odd coefficient.
+
+`prefix_permutation_lemmas.py` independently checks these exact formulas exhaustively at widths 2 through 8 (6152 coefficient/shift/permutation comparisons). For the rotation-like `k*a+q` case, its bit-zero family is the ordinary first-bit family after replacing the first multiplier by `m+2**s`, since `bit_s(m*x+C) XOR x0 = bit_s((m+2**s)*x+C)`. Consequently the earlier shift-pair influence classification still leaves only `(19,16)`. At these shifts, the low13 output bits are simply `q`; `python first_triangular.py rotate` is `UNSAT` in about 1.1s.
+
+The original input can remain live, so nonbijectivity of the first affine word alone is not enough for other third-MAD placements. `product_shift_fibers.py` covers the following larger family:
+
+```
+z = x XOR Ki              # free mathematical input encoding
+a = m*z+C                # first instruction
+q = a>>s                 # second instruction
+b = z*a+q                # or z*z+q, q*q+z, k*z+q, k*q+z, a*q+z
+```
+
+The first multiplier may be even. Writing `m=2**v*m_odd`, the low-bit influence classification forces effective first shift `s-v=19`, final shift16, and the known first-bit gauges for `m_odd`, `Ki`, and the affine base. All `v=0..12` are included. For `a*q+z`, odd `m` makes the output parity imbalanced (one-quarter or three-quarters ones); for even `m`, the low bit of `a` must be one to mix a higher input bit down.
+
+For any bijective triangular downstream map, the candidate prefix expressed in the reference-prefix coordinate must itself be a bijective triangular map. Thus flipping reference bit `j` preserves all lower bits and flips bit `j`. Eight exact 32-bit reference-prefix centers and their coordinate flips already contradict the low12 projection for all six stated third-MAD choices: **77 checks, all `UNSAT`**, generally below 3.4s each. The free coefficient `k`, full input mask, and first-MAD constants remain symbolic. Reproduce individual cases with `python product_shift_fibers.py --kind product --valuation 0`; kinds are `product`, `square_input`, `square_shift`, `affine_input`, `affine_shift`, and `a_shift_input` (the last starts at valuation1).
+
+Adjacent elementary cases are excluded without synthesis: `z*q+a` has imbalanced parity when `q0` depends on an input bit above `z0`; `z AND q` and `z OR q` can only clear or set bits of `z`, so a permutation of all words of either form would have to be the identity. The ordinary `z XOR q` replacement is excluded by the `branch_shift` fiber case. These statements concern the stated prefix layouts and the triangular downstream assumption, not arbitrary nine-operation programs.
 
 ## Explicit limits
 
