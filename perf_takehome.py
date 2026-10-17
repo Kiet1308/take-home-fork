@@ -250,6 +250,16 @@ class IR:
         self.emit('flow',('vselect',b,self.pair_mask,pattern+1,pattern),
                   mask_reads+list(range(pattern+1,pattern+8,2)),range(b,b+8))
         return a,b
+    def single_broadcast(self,pattern):
+        zero=self.const_zero
+        for k in (2,4,6):
+            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',
+                      ('+',pattern+k,pattern,zero),[pattern,zero],[pattern+k])
+        out=self.new()
+        self.emit('flow',('vselect',out,self.pair_mask,pattern,pattern-1),
+                  list(range(self.pair_mask,self.pair_mask+8))+list(range(pattern,pattern+8,2)),
+                  range(out,out+8))
+        return out
     def op(self,op,*src,e='flex'):
         d=self.new(); self.emit(e,(op,d,*src),[a+k for a in src for k in range(8)],range(d,d+8)); return d
     def select(self,bit,a,b,diff):
@@ -321,7 +331,7 @@ class IR:
         scalar pointers to consecutive memory words reserved for this call.
         """
         event=getattr(self,'record_event_count',0); self.record_event_count=event+1
-        events=set(json.loads(os.getenv('STRIDE1_EVENTS', '[0, 4]')))
+        events=set(json.loads(os.getenv('STRIDE1_EVENTS', '[0, 4, 12]')))
         if anchor_ptrs is None and event in events:
             return self.packed_record(p,v)
         out=self.new(); buffers=[]; tokens=[]
@@ -439,12 +449,16 @@ class IR:
                     for op,result in pairs:
                         if result in wanted: recipes[result].append((op,a,b,ia,ib))
         completed=[False]*len(n)
-        for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else 1)+max([n[j][4] for j in n[i][3]] or [0])
-        bias=float(os.getenv('GROUP_BIAS', '5.25')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.5')); toff=float(os.getenv('TAIL_OFFSET', '120'))
-        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{"15": 16, "4": 2, "10": -8, "5": 4, "8": 4, "12": 4}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{}')).items()}
+        cpw=json.loads(os.getenv('CP_WEIGHTS', '{"load": 1.25, "flow": 1.25}'))
+        for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else cpw.get(n[i][0],1))+max([n[j][4] for j in n[i][3]] or [0])
+        bias=float(os.getenv('GROUP_BIAS', '5.25')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.5')); toff=float(os.getenv('TAIL_OFFSET', '150'))
+        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{"15": 16, "4": 2, "10": -8, "5": 12, "8": 4, "12": 4, "1": -4}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{"2": -2}')).items()}
+        context_offsets=json.loads(os.getenv('CONTEXT_OFFSETS', '{"18,13": 2, "7,1": 4, "5,5": 2, "3,14": 2, "0,0": 2, "8,12": 4, "15,4": 2, "24,2": -4, "30,0": 2, "1,10": 8, "20,1": 8, "20,7": 2, "9,16": 4, "3,11": 2, "25,8": -8, "8,1": 8, "9,3": -4}'))
+        engine_offsets=json.loads(os.getenv('ENGINE_OFFSETS', '{"valu": -4, "load": -4}'))
         def score(i):
             ctx=n[i][5]
-            return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-100'))
+            extra=engine_offsets.get(n[i][0],0)+(context_offsets.get(str(ctx[0])+','+str(ctx[1]),0) if ctx else 0)
+            return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-300')))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record','pairalu']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
@@ -641,16 +655,21 @@ class KernelBuilder:
         pair_values=[(33,16896),(0xaccf6200,0xfd7046c5),(4097,0x7ed55d16),(19,0xc761c23c),(0xe9f8cc1d,9),(16,0xb55a4f09),(3,4),(0xfffffffe,-40),(-60,2430),(2310,1030),(1032,1029)]
         mem_names=('c5','x0','x1','y0','y1','v0','v1','d00','d01','d10','d11','node1','node2','node3','node4','node5','node6')
         mem_constants=(0xb55a4f09,-60,-40,2310,2430,4,16,1031,1032,1029,1030)
-        mem_bits=int(os.getenv('MEM_BCAST_MASK', '75456'),0)
+        mem_bits=int(os.getenv('MEM_BCAST_MASK', '75276'),0)
         mem_values={x&0xffffffff for j,x in enumerate(mem_constants) if mem_bits>>j&1}
-        pair_bits=int(os.getenv('PAIR_MASK', '256'),0)
+        single_constants=mem_constants+(4097,0x7ed55d16,19,0xc761c23c,33,16896,0xe9f8cc1d,0xaccf6200,9,0xfd7046c5,0xfffffffe,1,3)
+        # Bits0..16 match MEM_BCAST_MASK; 11..16 are cached nodes1..6.
+        single_items=list(enumerate(mem_constants))+list(enumerate(single_constants[11:],17))
+        single_bits=int(os.getenv('SINGLE_BCAST_MASK', '388039234'),0)
+        single_values={x&0xffffffff for j,x in single_items if single_bits>>j&1} - mem_values
+        pair_bits=int(os.getenv('PAIR_MASK', '258'),0)
         for j,pair in enumerate(pair_values):
-            if any((x&0xffffffff) in mem_values for x in pair): pair_bits &= ~(1<<j)
+            if any((x&0xffffffff) in (mem_values|single_values) for x in pair): pair_bits &= ~(1<<j)
         nbuf=int(os.getenv('ANCHOR_BUFFERS', '4'))
         staging=None
         mem_broadcast_count=0
-        pair_map={}; destinations={}
-        if pair_bits:
+        pair_map={}; destinations={}; single_patterns={}
+        if pair_bits or single_bits:
             mask_owner=ir.new(9); mask_pattern=mask_owner+1
             ir.fixed={mask_owner:1}
             destinations[2]=mask_pattern
@@ -659,6 +678,9 @@ class KernelBuilder:
                 a,b=(v&0xffffffff for v in pair); pattern=ir.new(10)+1
                 pair_map[a]=pair_map[b]=(a,b,pattern)
                 destinations[a]=pattern; destinations[b]=pattern+1
+            for x in sorted(single_values):
+                pattern=ir.new(9)+1
+                single_patterns[x]=pattern; destinations[x]=pattern
 
         def sc(x):
             x &= 0xffffffff
@@ -681,8 +703,8 @@ class KernelBuilder:
         def memory_broadcast(a):
             nonlocal mem_broadcast_count
             buffers=get_staging()
-            rotation=int(os.getenv('MEM_BCAST_ROTATION', '5'))
-            step=int(os.getenv('MEM_BCAST_STEP', '3'))
+            rotation=int(os.getenv('MEM_BCAST_ROTATION', '0'))
+            step=int(os.getenv('MEM_BCAST_STEP', '7'))
             pointers=buffers[(rotation+step*mem_broadcast_count)%nbuf]
             mem_broadcast_count+=1
             return ir.memory_broadcast(a,pointers)
@@ -692,8 +714,11 @@ class KernelBuilder:
             if x not in vectors:
                 if x in mem_values:
                     vectors[x]=memory_broadcast(sc(x))
-                elif pair_bits and x==2:
+                elif (pair_bits or single_bits) and x==2:
                     vectors[x]=ir.bootstrap_pair_mask(mask_pattern,sc(x),sc(0))
+                elif x in single_patterns:
+                    if not hasattr(ir,'pair_mask'): vc(2)
+                    sc(x); vectors[x]=ir.single_broadcast(single_patterns[x])
                 elif x in pair_map:
                     a,b,pattern=pair_map[x]; sc(a); sc(b)
                     vectors[a],vectors[b]=ir.pair_broadcast(pattern)
@@ -774,7 +799,7 @@ class KernelBuilder:
                     scalars[value] = dest
 
         raw = ir.load(sc(7))
-        root_mask=int(os.getenv('ROOT_SCALAR','0'))
+        root_mask=int(os.getenv('ROOT_SCALAR', '0'))
         root_original = raw if root_mask&1 else ir.broadcast(raw)
         original_reads = [ir.last[raw]]
         source = {k: raw+k for k in range(7)}
@@ -785,10 +810,15 @@ class KernelBuilder:
 
         tree = []
         for k in range(7):
-            enc = ir.scalar('^', source[k], sc(0xb55a4f09))
-            if 1<=k<=6 and mem_bits>>(10+k)&1:
-                tree.append(memory_broadcast(enc))
-            else: tree.append(enc if k==0 and root_mask&2 else ir.broadcast(enc))
+            if 1<=k<=6 and single_bits>>(10+k)&1 and not mem_bits>>(10+k)&1:
+                pattern=ir.new(9)+1
+                ir.emit('alu',('^',pattern,source[k],sc(0xb55a4f09)),[source[k],sc(0xb55a4f09)],[pattern])
+                tree.append(ir.single_broadcast(pattern))
+            else:
+                enc = ir.scalar('^', source[k], sc(0xb55a4f09))
+                if 1<=k<=6 and mem_bits>>(10+k)&1:
+                    tree.append(memory_broadcast(enc))
+                else: tree.append(enc if k==0 and root_mask&2 else ir.broadcast(enc))
         for depth in (1, 2):
             base = (1 << depth)-1
             tree[base:base+(1 << depth)] = reversed(tree[base:base+(1 << depth)])
@@ -825,6 +855,9 @@ class KernelBuilder:
         # becomes a prerequisite of an earlier round through this mechanism.
         for j,x in enumerate(mem_constants):
             if mem_bits>>j&1: vc(x)
+        if os.getenv('SINGLE_HOIST', '1')=='1':
+            for j,x in single_items:
+                if single_bits>>j&1: vc(x)
         final_values = []
         for g, v in enumerate(values):
             bits = []
@@ -892,7 +925,7 @@ class KernelBuilder:
                 v = hash_value(v, decode=r in (8, 9, 15))
                 if depth < 10 and r < 15:
                     signed = depth in (2, 4)
-                    parity_mod=os.getenv('PARITY_MOD2')=='1'
+                    parity_mod=os.getenv('PARITY_MOD2', '0')=='1'
                     bits.append(op('|' if signed else '%' if parity_mod else '&', v, vc(0xfffffffe) if signed else two if parity_mod else one))
             final_values.append(v)
 
