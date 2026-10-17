@@ -204,6 +204,24 @@ class IR:
         return a
     def broadcast(self,a):
         d=self.new(); self.emit('valu',('vbroadcast',d,a),[a],range(d,d+8)); return d
+    def bootstrap_pair_mask(self,pattern,a,zero):
+        for k in range(1,9):
+            src=a if k%2==0 else zero
+            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',('+',pattern+k,src,zero),[src,zero],[pattern+k])
+        out=self.new()
+        self.emit('flow',('vselect',out,pattern,pattern,pattern+1),range(pattern,pattern+9),range(out,out+8))
+        self.pair_mask=pattern
+        return out
+    def pair_broadcast(self,pattern):
+        zero=self.const_zero
+        for k in range(2,9):
+            src=pattern+k%2
+            self.emit('pairalu' if os.getenv('PAIR_SETUP_FIRST', '1')=='1' else 'alu',('+',pattern+k,src,zero),[src,zero],[pattern+k])
+        a=self.new(); b=self.new()
+        reads=list(range(pattern,pattern+9))+list(range(self.pair_mask,self.pair_mask+8))
+        self.emit('flow',('vselect',a,self.pair_mask,pattern,pattern+1),reads,range(a,a+8))
+        self.emit('flow',('vselect',b,self.pair_mask,pattern+1,pattern),reads,range(b,b+8))
+        return a,b
     def op(self,op,*src,e='flex'):
         d=self.new(); self.emit(e,(op,d,*src),[a+k for a in src for k in range(8)],range(d,d+8)); return d
     def select(self,bit,a,b,diff):
@@ -274,8 +292,15 @@ class IR:
         eight scalar stores followed by one vload. anchor_ptrs are eight scratch
         scalar pointers to consecutive memory words reserved for this call.
         """
+        event=getattr(self,'record_event_count',0); self.record_event_count=event+1
+        events=set(json.loads(os.getenv('STRIDE1_EVENTS', '[0, 4]')))
+        if anchor_ptrs is None and event in events:
+            return self.packed_record(p,v)
         out=self.new(); buffers=[]; tokens=[]
         inherited=list(getattr(self,'extra_deps',[]))
+        stage_key=tuple(anchor_ptrs) if anchor_ptrs is not None else None
+        previous=getattr(self,'stage_last',{}).get(stage_key)
+        if previous is not None: self.extra_deps=inherited+[previous]
         for parity in (0,1):
             buf=self.new(14+parity); buffers.append(buf)
             for j,lane in enumerate(range(parity,8,2)):
@@ -295,8 +320,33 @@ class IR:
         if anchor_ptrs is None: return out,buffers
         self.extra_deps=inherited+tokens
         anchor=self.load(anchor_ptrs[0])
+        if not hasattr(self,'stage_last'): self.stage_last={}
+        self.stage_last[stage_key]=self.last[anchor]
         self.extra_deps=inherited
         return out,buffers,anchor
+    def packed_record(self,p,v):
+        out=self.new(); buf=self.new(15); tokens=[]
+        pointers=self.child_staging[self.context[0]%len(self.child_staging)]
+        stage_key=tuple(pointers)
+        inherited=list(getattr(self,'extra_deps',[]))
+        previous=getattr(self,'stage_last',{}).get(stage_key)
+        if previous is not None: self.extra_deps=inherited+[previous]
+        for lane in range(8):
+            xor=store=None
+            if lane:
+                xor=('^',out+lane-1,v+lane-1,buf+lane+1)
+                store=('store',pointers[lane-1],buf+lane)
+            token=self._native_compound(('vload',buf+lane,p+lane),[p+lane],range(buf+lane,buf+lane+8),xor,store)
+            if store is not None: tokens.append(token)
+        self.emit('alu',('^',out+7,v+7,buf+9),[v+7,buf+9],[out+7])
+        self.emit('store',('store',pointers[7],buf+8),[pointers[7],buf+8],[])
+        tokens.append(len(self.nodes)-1)
+        self.extra_deps=inherited+tokens
+        child1=self.load(pointers[0])
+        if not hasattr(self,'stage_last'): self.stage_last={}
+        self.stage_last[stage_key]=self.last[child1]
+        self.extra_deps=inherited
+        return out,('packed',buf,child1)
     def gather_xor_word(self,p,v,offset=3,chains=2):
         """XOR values with word offset of eight contiguous native vloads.
 
@@ -318,6 +368,9 @@ class IR:
             self.emit('alu',('^',out+lane,v+lane,buf+offset),[v+lane,buf+offset],[out+lane])
         return out
     def native_select(self,v,bit,buffers):
+        if buffers[0]=='packed':
+            node=self.op('vselect',bit,buffers[2],buffers[1],e='flow')
+            return self.op('^',v,node)
         nodes=[]
         for parity,buf in enumerate(buffers):
             out=self.new()
@@ -364,7 +417,7 @@ class IR:
         def score(i):
             ctx=n[i][5]
             return -n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-150'))
-        pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record']}
+        pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record','pairalu']}
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
         partial=[]; ins=[]; usage=[]; pending_lookup=None
@@ -373,7 +426,11 @@ class IR:
             if target is not None:
                 pending_lookup=None; bundle['lookup_target']=n[target][1][1]; chosen.append(target); used.add(target)
             pre_alu=0; pre_store=0
-            if target is None and len(ins)<int(os.getenv('CONST_ALU_CYCLES', '20')):
+            if target is None:
+                while ready['pairalu'] and pre_alu<SLOT_LIMITS['alu']:
+                    _,i=heapq.heappop(ready['pairalu']); bundle.setdefault('alu',[]).append(n[i][1])
+                    pre_alu+=1; chosen.append(i); used.add(i)
+            if target is None and pre_alu<SLOT_LIMITS['alu'] and len(ins)<int(os.getenv('CONST_ALU_CYCLES', '20')):
                 remove=set()
                 for _,i in sorted(ready['constflex']):
                     d=n[i][1][1]; val=n[i][1][2]&0xffffffff
@@ -531,17 +588,36 @@ class KernelBuilder:
         self.ir = ir
         scalars = {}
         vectors = {}
+        pair_values=[(33,16896),(0xaccf6200,0xfd7046c5),(4097,0x7ed55d16),(19,0xc761c23c),(0xe9f8cc1d,9),(16,0xb55a4f09),(3,4),(0xfffffffe,-40),(-60,2430),(2310,1030),(1032,1029)]
+        pair_bits=int(os.getenv('PAIR_MASK', '256'),0)
+        pair_map={}; destinations={}
+        if pair_bits:
+            mask_pattern=ir.new(9); destinations[2]=mask_pattern
+            for j,pair in enumerate(pair_values):
+                if not(pair_bits>>j&1):continue
+                a,b=(v&0xffffffff for v in pair); pattern=ir.new(9)
+                pair_map[a]=pair_map[b]=(a,b,pattern)
+                destinations[a]=pattern; destinations[b]=pattern+1
 
         def sc(x):
             x &= 0xffffffff
             if x not in scalars:
-                scalars[x] = ir.const(x)
+                if x in destinations:
+                    dest=destinations[x]
+                    ir.emit('constflex',('const',dest,x),[ir.const_zero],[dest])
+                    ir.nodes[-1].append(('add_imm',dest,ir.const_zero,x)); scalars[x]=dest
+                else: scalars[x] = ir.const(x)
             return scalars[x]
 
         def vc(x):
             x &= 0xffffffff
             if x not in vectors:
-                vectors[x] = ir.broadcast(sc(x))
+                if pair_bits and x==2:
+                    vectors[x]=ir.bootstrap_pair_mask(mask_pattern,sc(x),sc(0))
+                elif x in pair_map:
+                    a,b,pattern=pair_map[x]; sc(a); sc(b)
+                    vectors[a],vectors[b]=ir.pair_broadcast(pattern)
+                else: vectors[x] = ir.broadcast(sc(x))
             return vectors[x]
 
         def op(name, *args):
@@ -618,7 +694,8 @@ class KernelBuilder:
                     scalars[value] = dest
 
         raw = ir.load(sc(7))
-        root_original = ir.broadcast(raw)
+        root_mask=int(os.getenv('ROOT_SCALAR', '0'))
+        root_original = raw if root_mask&1 else ir.broadcast(raw)
         original_reads = [ir.last[raw]]
         source = {k: raw+k for k in range(7)}
         for off in range(0, 504, 8):
@@ -629,7 +706,7 @@ class KernelBuilder:
         tree = []
         for k in range(7):
             enc = ir.scalar('^', source[k], sc(0xb55a4f09))
-            tree.append(ir.broadcast(enc))
+            tree.append(enc if k==0 and root_mask&2 else ir.broadcast(enc))
         for depth in (1, 2):
             base = (1 << depth)-1
             tree[base:base+(1 << depth)] = reversed(tree[base:base+(1 << depth)])
@@ -660,6 +737,7 @@ class KernelBuilder:
         table_reads = defaultdict(list)
         nbuf = int(os.getenv('ANCHOR_BUFFERS', '8'))
         staging = [[sc(2054+8*j+k) for k in range(8)] for j in range(nbuf)]
+        ir.child_staging=staging
         last_pack = [None]*nbuf
         final_values = []
         for g, v in enumerate(values):
@@ -670,7 +748,13 @@ class KernelBuilder:
                 ir.context = (g, r)
                 depth = r % 11
                 if depth == 0:
-                    v = op('^', v, root_original if r == 0 else tree[0])
+                    node=root_original if r==0 else tree[0]
+                    if root_mask & (1 if r==0 else 2):
+                        out=ir.new(); ctx=ir.context
+                        if os.getenv('ROOT_SCALAR_PREP')=='1': ir.context=None
+                        for lane in range(8): ir.emit('alu',('^',out+lane,v+lane,node),[v+lane,node],[out+lane])
+                        ir.context=ctx; v=out
+                    else: v=op('^',v,node)
                     bits = []
                 elif depth <= 2:
                     nodes = tree[(1 << depth)-1:(1 << (depth+1))-1]
@@ -722,7 +806,8 @@ class KernelBuilder:
                 v = hash_value(v, decode=r in (8, 9, 15))
                 if depth < 10 and r < 15:
                     signed = depth in (2, 4)
-                    bits.append(op('|' if signed else '&', v, vc(0xfffffffe) if signed else one))
+                    parity_mod=os.getenv('PARITY_MOD2', '0')=='1'
+                    bits.append(op('|' if signed else '%' if parity_mod else '&', v, vc(0xfffffffe) if signed else two if parity_mod else one))
             final_values.append(v)
 
         for g, v in enumerate(final_values):
