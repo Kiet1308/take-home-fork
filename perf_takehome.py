@@ -505,7 +505,7 @@ class IR:
             if self.last[a] in mapping: constant_sources.append((value,a,mapping[self.last[a]]))
         constant_sources.append((0,self.const_zero,None))
         wanted={v[1][2]&0xffffffff for v in n if v[0]=='constflex'}; recipes=defaultdict(list)
-        if int(os.getenv('CONST_ALU_CYCLES', '24')):
+        if int(os.getenv('CONST_ALU_CYCLES', '28')):
             cache_key=tuple(row[0] for row in constant_sources)
             if cache_key not in _CONST_RECIPE_CACHE:
                 cached=defaultdict(list)
@@ -521,24 +521,37 @@ class IR:
                 for op,ai,bi in options:
                     _,a,ia=constant_sources[ai]; _,b,ib=constant_sources[bi]
                     recipes[val].append((op,a,b,ia,ib))
+        # Use the FLOW slot at cycle two for the second hash XOR constant.
+        # Broadcasting it one cycle earlier fills startup vector slots while
+        # preserving the two LOAD slots for input vectors and the first tree.
+        boot_flow_nodes=set()
+        for i,v in enumerate(n):
+            if v[0]=='constflex' and v[1][2]==0xc761c23c:
+                v[0]='flow'; v[1]=v[8]; boot_flow_nodes.add(i)
         completed=[False]*len(n)
-        cpw=json.loads(os.getenv('CP_WEIGHTS', '{"load": 1.5, "flow": 1.0, "store": 0.75, "record": 1.0, "alu": 1.25}'))
+        cpw=json.loads(os.getenv('CP_WEIGHTS', '{"load": 1.75, "flow": 0.9999999999999999, "store": 0.75, "record": 1.0, "alu": 1.5, "flex": 0.9, "valu": 0.9}'))
         for i in range(len(n)-1,-1,-1): n[i][4]=(2 if n[i][0]=='lookup' else cpw.get(n[i][0],1))+max([n[j][4] for j in n[i][3]] or [0])
-        bias=float(os.getenv('GROUP_BIAS', '5.75')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.5')); toff=float(os.getenv('TAIL_OFFSET', '165'))
-        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{"2": -2, "18": 8, "6": 8}')).items()}
-        context_offsets=json.loads(os.getenv('CONTEXT_OFFSETS', '{"18,13": 2, "7,1": 4, "5,5": 2, "3,14": 2, "0,0": 2, "8,12": 4, "15,4": 2, "24,2": -4, "30,0": 2, "1,10": 8, "20,1": 8, "20,7": 2, "9,16": 4, "3,11": 2, "25,8": -12, "8,1": 8, "9,3": -4, "30,6": -2, "11,11": -6, "17,4": -4, "14,16": 4, "28,0": -4, "16,0": 8, "16,16": -4, "20,0": 2, "13,5": -8, "26,3": -4, "24,6": -4, "11,15": -6, "8,16": -2, "9,13": 4, "22,12": -8, "1,0": 16, "30,1": 8, "16,15": 8, "15,13": 4, "21,15": 2, "7,16": -8, "2,7": -8, "21,0": -8, "23,14": 8, "14,7": 2, "28,13": -8, "4,0": 4, "2,15": -8, "17,13": 4, "22,3": -2, "26,15": 4, "13,1": 8, "7,11": 4, "14,12": -2, "30,11": 4, "27,0": -2}'))
-        engine_offsets=json.loads(os.getenv('ENGINE_OFFSETS', '{"valu": -8, "load": -4, "record": 6, "flex": 0, "flow": -2, "constflex": 4}'))
+        bias=float(os.getenv('GROUP_BIAS', '6.75')); tbias=float(os.getenv('TAIL_GROUP_BIAS', '0.75')); toff=float(os.getenv('TAIL_OFFSET', '170.0'))
+        round_offsets={int(k):v for k,v in json.loads(os.getenv('ROUND_OFFSETS', '{"11": -2, "4": -4, "12": -1, "16": 0.5, "10": -8, "9": -2, "14": -2}')).items()}; group_offsets={int(k):v for k,v in json.loads(os.getenv('GROUP_OFFSETS', '{"2": -2, "18": 8, "6": 8, "29": 1, "14": -8, "15": -4, "17": 1}')).items()}
+        context_offsets=json.loads(os.getenv('CONTEXT_OFFSETS', '{"18,13": 6, "7,1": 2, "5,5": 2, "3,14": 2, "0,0": 2, "8,12": 4, "15,4": 3, "24,2": -14, "30,0": 2, "1,10": 8, "20,1": 8, "20,7": 2, "9,16": 3, "3,11": -2, "25,8": -12, "8,1": 7, "9,3": -4, "30,6": -2, "11,11": -6, "17,4": -6, "14,16": 2, "28,0": -4, "16,0": 4, "16,16": -4, "20,0": 2, "13,5": -8, "26,3": -4, "24,6": -4, "11,15": -6, "8,16": -2, "9,13": 4, "22,12": -8, "1,0": 16, "30,1": 8, "16,15": 4, "15,13": 4, "21,15": 2, "7,16": 0, "2,7": -10, "21,0": -9, "23,14": 8, "14,7": 2, "28,13": -8, "4,0": 4, "2,15": -8, "17,13": 4, "22,3": -4, "26,15": 4, "13,1": 8, "7,11": 4, "14,12": -2, "30,11": 4, "27,0": -2, "21,5": -2, "19,8": 4, "4,4": -8, "0,13": 2, "17,16": -2, "17,6": -4, "16,12": 1, "24,13": 2, "19,11": 8, "5,14": -8, "1,14": 4, "1,15": -14, "27,10": 8, "18,15": -4, "19,12": -1, "9,9": -4, "7,8": -1, "8,4": 4, "10,12": -2, "10,4": -4, "22,13": 1, "22,6": 8, "26,12": -8, "1,16": -4, "20,10": -1, "25,14": -8, "2,1": -2, "12,3": -2, "14,15": -4, "3,3": -4, "28,3": 2, "19,1": 8, "12,11": 4, "14,14": -1, "21,11": -4, "13,4": 4, "14,8": 4, "31,9": 5, "2,12": -1, "22,10": -4, "8,14": 4, "29,13": -8, "0,1": -1, "22,5": -1}'))
+        engine_offsets=json.loads(os.getenv('ENGINE_OFFSETS', '{"valu": -10.5, "load": -6.0, "record": 8.5, "flex": 3, "flow": -3.5, "constflex": 0.5, "alu": 2.5}'))
         def score(i):
             ctx=n[i][5]
+            if i in boot_flow_nodes: return -10000
             pin=(-10000 if n[i][0]=='constflex' and n[i][1][2] in ((0x7ed55d16,0xc761c23c) if os.getenv('BOOT_SYNTH', '1')=='1' else (4097,0x7ed55d16)) and os.getenv('BOOT_PIN', '0')=='1' else 0)
             if n[i][0]=='load' and n[i][1][0]=='vload' and n[i][1][2]==self.const_zero: pin-=20000
             extra=pin+engine_offsets.get(n[i][0],0)+(context_offsets.get(str(ctx[0])+','+str(ctx[1]),0) if ctx else 0)
-            return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-25')))
+            return extra+(-n[i][4]+((ctx[0]*tbias+toff) if ctx[1]>=11 else ctx[0]*bias)+round_offsets.get(ctx[1],0)+group_offsets.get(ctx[0],0) if ctx else -n[i][4]+float(os.getenv('PREP_OFFSET', '-54.0')))
         pending=[len(v[2]) for v in n]; ready={e:[] for e in list(SLOT_LIMITS)+['flex','select','lookup','constflex','flowalu','record','pairalu']}
+        for i in boot_flow_nodes: pending[i]+=1
         for i,v in enumerate(n):
             if not pending[i]: heapq.heappush(ready[v[0]],(score(i),i))
         partial=[]; ins=[]; usage=[]; pending_lookup=None
         while any(ready.values()) or partial or pending_lookup is not None:
+            if len(ins)==2:
+                for i in boot_flow_nodes:
+                    pending[i]-=1
+                    if not pending[i]: heapq.heappush(ready[n[i][0]],(score(i),i))
             bundle={}; chosen=[]; used=set(); target=pending_lookup
             if target is not None:
                 pending_lookup=None; bundle['lookup_target']=n[target][1][1]; chosen.append(target); used.add(target)
@@ -547,7 +560,7 @@ class IR:
                 while ready['pairalu'] and pre_alu<SLOT_LIMITS['alu']:
                     _,i=heapq.heappop(ready['pairalu']); bundle.setdefault('alu',[]).append(n[i][1])
                     pre_alu+=1; chosen.append(i); used.add(i)
-            if target is None and pre_alu<SLOT_LIMITS['alu'] and len(ins)<int(os.getenv('CONST_ALU_CYCLES', '24')):
+            if target is None and pre_alu<SLOT_LIMITS['alu'] and len(ins)<int(os.getenv('CONST_ALU_CYCLES', '28')):
                 remove=set()
                 for _,i in sorted(ready['constflex']):
                     d=n[i][1][1]; val=n[i][1][2]&0xffffffff
@@ -739,7 +752,7 @@ class KernelBuilder:
         single_constants=mem_constants+(4097,0x7ed55d16,19,0xc761c23c,33,16896,0xe9f8cc1d,0xaccf6200,9,0xfd7046c5,0xfffffffe,1,3)
         # Bits0..16 match MEM_BCAST_MASK; 11..16 are cached nodes1..6.
         single_items=list(enumerate(mem_constants))+list(enumerate(single_constants[11:],17))
-        single_bits=int(os.getenv('SINGLE_BCAST_MASK', '107611987'),0)
+        single_bits=int(os.getenv('SINGLE_BCAST_MASK', '124389203'),0)
         single_values={x&0xffffffff for j,x in single_items if single_bits>>j&1} - mem_values
         if os.getenv('BOOT_CRITICAL', '1')=='1':
             single_values -= {4097,0x7ed55d16,19,0xc761c23c,16}
@@ -794,7 +807,7 @@ class KernelBuilder:
         def memory_broadcast(a,b=None):
             nonlocal mem_broadcast_count
             buffers=get_staging()
-            rotation=int(os.getenv('MEM_BCAST_ROTATION', '1'))
+            rotation=int(os.getenv('MEM_BCAST_ROTATION', '0'))
             step=int(os.getenv('MEM_BCAST_STEP', '1'))
             pointers=buffers[(rotation+step*mem_broadcast_count)%nbuf]
             mem_broadcast_count+=1
@@ -933,7 +946,7 @@ class KernelBuilder:
 
         tree = []
         tree_pairs={}
-        for a,b in [(5,6)]:
+        for a,b in [(1,2),(5,6)]:
             assert 1<=a<=6 and 1<=b<=6 and a!=b and a not in tree_pairs and b not in tree_pairs
             tree_pairs[a]=tree_pairs[b]=(a,b)
         tree_pair_vectors={}
