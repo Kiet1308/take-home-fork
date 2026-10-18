@@ -1,0 +1,1 @@
+{"kind": "two_mad", "combine": "xor", "first_free": false, "second_free": false, "dependent": false, "outer_free": false, "fixes": null, "parity": 0, "result": "unsat", "samples": 104, "seconds": 1.9}

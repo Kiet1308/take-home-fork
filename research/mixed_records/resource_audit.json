@@ -1,0 +1,107 @@
+{
+  "baseline": {
+    "cycles": 865,
+    "arithmetic": 51704,
+    "load": 1680,
+    "flow": 849,
+    "store": 474
+  },
+  "target_cycles": 849,
+  "resource_capacities": {
+    "arithmetic": 50940,
+    "load": 1698,
+    "flow": 849,
+    "store": 1698
+  },
+  "scope": "Named implementations only; no general impossibility claim",
+  "proposals": [
+    {
+      "name": "Only second-pass depths 2--4, fully packed six descendant fields",
+      "delta": {
+        "arithmetic": -256,
+        "load": 160,
+        "flow": 0,
+        "store": 1280
+      },
+      "optimistic_counts": {
+        "arithmetic": 51448,
+        "load": 1840,
+        "flow": 849,
+        "store": 1754
+      },
+      "exceeded": {
+        "arithmetic": 508,
+        "load": 142,
+        "store": 56
+      },
+      "selected_events": 32,
+      "omitted": "All new layout, address, and metadata preparation costs",
+      "flow_per_event": {
+        "old": 7,
+        "new": 7
+      },
+      "pointer_note": "The second-pass p3 has no later consumer and can vanish."
+    },
+    {
+      "name": "Both passes of depths 2--4, retaining the existing p5 formula",
+      "delta": {
+        "arithmetic": -256,
+        "load": 317,
+        "flow": 67,
+        "store": 2536
+      },
+      "optimistic_counts": {
+        "arithmetic": 51448,
+        "load": 1997,
+        "flow": 916,
+        "store": 3010
+      },
+      "exceeded": {
+        "arithmetic": 508,
+        "load": 299,
+        "flow": 67,
+        "store": 1312
+      },
+      "selected_events": 64,
+      "replaced_baseline_packed_events": [
+        0,
+        4,
+        12
+      ],
+      "omitted": "All new layout, address, and metadata preparation costs",
+      "pointer_note": "First-pass p5 = p3 + signed_b4 * V[b3] still requires p3, including its MAD and two selector FLOWs.  Moving p3 computation to round5 does not remove its cost."
+    },
+    {
+      "name": "Depths 7--9 triples, direct depth10 pointer, fully packed descendants",
+      "delta": {
+        "arithmetic": -256,
+        "load": 31,
+        "flow": 193,
+        "store": 1336
+      },
+      "optimistic_counts": {
+        "arithmetic": 51448,
+        "load": 1711,
+        "flow": 1042,
+        "store": 1810
+      },
+      "exceeded": {
+        "arithmetic": 508,
+        "load": 13,
+        "flow": 193,
+        "store": 112
+      },
+      "selected_events": 32,
+      "replaced_baseline_packed_events": [
+        126
+      ],
+      "omitted": "New address constants, global in-place preparation hazards, and scheduling costs",
+      "setup": "Optimistically reuses the original first511 source loads; adds128 vloads for groups of four raw depth9 grandchildren. The128 new eight-word record stores replace64 old image stores.",
+      "flow_per_event": {
+        "old": 7,
+        "new": 13
+      },
+      "pointer_note": "p7 stride8 can encode the depth7 path for direct leaf addressing.  Selecting its three-bit depth10 digit uses seven FLOWs in this implementation."
+    }
+  ]
+}

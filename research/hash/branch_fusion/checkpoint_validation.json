@@ -1,0 +1,60 @@
+{
+  "baseline_cycles": 865,
+  "scratch_peak": 1370,
+  "instruction_counts": {
+    "load": 1680,
+    "flow": 850,
+    "valu": 5172,
+    "alu": 10328,
+    "store": 474
+  },
+  "flow_instructions_excluding_pause": 849,
+  "arithmetic_scalar_equivalent": 51704,
+  "parity_vectors": 448,
+  "parity_scalar_equivalent": 3584,
+  "parity_vectors_by_round": {
+    "0": 32,
+    "1": 32,
+    "2": 32,
+    "3": 32,
+    "4": 32,
+    "5": 32,
+    "6": 32,
+    "7": 32,
+    "8": 32,
+    "9": 32,
+    "11": 32,
+    "12": 32,
+    "13": 32,
+    "14": 32
+  },
+  "parity_vectors_by_opcode": {
+    "%": 352,
+    "|": 96
+  },
+  "flow_nodes_by_round": {
+    "1": 32,
+    "2": 96,
+    "3": 66,
+    "4": 61,
+    "5": 32,
+    "6": 64,
+    "7": 64,
+    "8": 63,
+    "9": 99,
+    "12": 32,
+    "13": 96,
+    "14": 64,
+    "15": 64
+  },
+  "compact_state_identity_witnesses": 100071,
+  "compact_state_identity_checks": "PASS",
+  "per_hash_operation_accounting": {
+    "ordinary_encoded_h_and_flag": 11,
+    "hhalf_and_flag_before_node_preparation": 12,
+    "hhalf_using_separate_branch_identity_before_node_preparation": 13,
+    "ehalf_and_flag_and_next_input_conversion_before_node_preparation": 13,
+    "existing_node_xor_excluded_from_all_three": true
+  },
+  "scope": "The checks verify identities and exact baseline consumers. They are not a general instruction lower bound."
+}

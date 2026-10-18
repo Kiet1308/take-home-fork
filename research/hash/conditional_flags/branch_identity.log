@@ -1,0 +1,8 @@
+branch identity encoded=False: unsat
+branch identity encoded=True: unsat
+comparison survivors from first 7 existing words: []
+comparison survivors from first 8 existing words: []
+comparison survivors from first 9 existing words: []
+exotic existing-word flag survivors, input parity=None: []
+exotic existing-word flag survivors, input parity=0: []
+exotic existing-word flag survivors, input parity=1: []

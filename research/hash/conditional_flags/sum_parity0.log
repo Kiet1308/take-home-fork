@@ -1,0 +1,1 @@
+{"kind": "drop4", "combine": "xor", "first_free": false, "second_free": false, "dependent": false, "outer_free": false, "fixes": null, "parity": 0, "result": "unsat", "samples": 78, "seconds": 4.44}

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "README.md",
+    "bytes": 4592,
+    "sha256": "ab56471597d551ad468a1d35910cc14808378c433708895c3839f6b38da0843c"
+  },
+  {
+    "name": "best_parameters.json",
+    "bytes": 22,
+    "sha256": "6d2c6f283e71c08c422937c2b718759948f3c50ad5abbfa09d4993e224d6255b"
+  },
+  {
+    "name": "cp_grid.json",
+    "bytes": 194,
+    "sha256": "b270d3c469af65120724b26668a3031ea258414fa6e37eb88a4027257ac51d04"
+  },
+  {
+    "name": "frozen_tests.log",
+    "bytes": 735,
+    "sha256": "dec9f30b98664534677b5a3969dee42bdcb02e4e62cbbd334b9b1c10e19a99bc"
+  },
+  {
+    "name": "intermediate_results.json",
+    "bytes": 806,
+    "sha256": "e92893747bca130581c6754be81daa7f344135e8360d25be336f9a99d24d4711"
+  },
+  {
+    "name": "kernel.py",
+    "bytes": 66040,
+    "sha256": "2d9a245116b8656b9ce802c7796467fef26ba095b875eac81fc0893eb255754d"
+  },
+  {
+    "name": "measure.py",
+    "bytes": 3416,
+    "sha256": "f44ff35e53c49f90e5f47472a7b35708f147335d5dbe0474c055622d0d9a8faa"
+  },
+  {
+    "name": "parameters.json",
+    "bytes": 5,
+    "sha256": "501de836b88be0a82b9af264bee8fa768a66abb5ac670b802bf7f696171b0e96"
+  },
+  {
+    "name": "raw_depth8_929.py",
+    "bytes": 65493,
+    "sha256": "562dd92b4a81841cbe1d97c49107de97fca608c90aeeb165a364f05ef501e916"
+  },
+  {
+    "name": "raw_depth8_935.py",
+    "bytes": 64796,
+    "sha256": "3dca4062b47e2378ababe8b8ed544b1c8793d355a3f3c312a916f4a431078375"
+  },
+  {
+    "name": "results.json",
+    "bytes": 7948,
+    "sha256": "fb70e42ed5341d8295f24812a59e93d65bfe4ecfa9e9812ca3a1780ae7a3dbb7"
+  },
+  {
+    "name": "run_frozen.py",
+    "bytes": 975,
+    "sha256": "2fd0ecad7626869509415af9c789df1a9f2c3517d6b69c0053277113219cee7b"
+  }
+]

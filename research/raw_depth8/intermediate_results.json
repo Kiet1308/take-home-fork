@@ -1,0 +1,47 @@
+[
+  {
+    "implementation": "raw_depth8_935.py",
+    "cycles": 935,
+    "scratch": 1399,
+    "counts": {
+      "load": 1739,
+      "flow": 856,
+      "valu": 5242,
+      "alu": 9767,
+      "store": 540
+    },
+    "weight": 51703,
+    "correct": true
+  },
+  {
+    "implementation": "raw_depth8_929.py",
+    "cycles": 929,
+    "scratch": 1512,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5308,
+      "alu": 9305,
+      "store": 540
+    },
+    "weight": 51769,
+    "correct": true
+  },
+  {
+    "implementation": "kernel.py",
+    "params": {
+      "RAW8_CP_WEIGHT": 0.05
+    },
+    "cycles": 889,
+    "scratch": 1513,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5233,
+      "alu": 9905,
+      "store": 540
+    },
+    "weight": 51769,
+    "correct": true
+  }
+]

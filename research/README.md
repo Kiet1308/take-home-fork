@@ -85,6 +85,36 @@ before setup or practical grandchild packing, so this is not a faster
 complete kernel. Global in-place preparation hazards and its address
 materialization costs are explicitly outside the local verification.
 
+## Conditional flags, mixed records, and raw depth-8 state
+
+`hash/conditional_flags/` preserves a two-operation exact branch identity,
+finite existing-word flag exclusions, and conditional-input-parity core
+searches. The branch identity shortens latency but adds an instruction when
+the full value is retained. Both exact identities, both constant-coefficient
+conditional cores, and both conditional sum-prefix cores passed their scoped
+UNSAT checks again after packaging. The first 15-second sum-parity-one retry
+returned UNKNOWN; the retained 60-second retry returned UNSAT in13.604 seconds.
+
+`hash/branch_fusion/` counts all448 retained vector flags and records exact
+31-bit state reconstructions. The inexpensive `h >> 1` representation still
+needs12 hash/flag operations versus11 ordinarily, before extra node metadata.
+The `e >> 1` representation needs13 including its next-input conversion.
+The packaged audit compiled main at865 cycles and passed100071 identity
+witnesses. These counts do not constitute a universal instruction lower bound.
+
+`mixed_records/` records three concrete partial-triple implementations and
+their LOAD/FLOW/STORE accounting. It corrects the preliminary512 arithmetic
+saving for upper triples to256: first-pass p3 is still needed by p5. Every
+named packed implementation exceeds a resource capacity at849 cycles even
+before charging all new setup work.
+
+`raw_depth8/` contains a complete alternate representation which moves256
+depth-8 node XORs to the round-7 hash outputs. Same-cycle ordinary STORE and
+ALU instructions avoid raw child copies. Additional record-address work and
+STOREs erase the arithmetic-neutral exchange. Its best bounded-grid result is
+877 cycles, scratch1429, arithmetic51767, LOAD1680, FLOW851, and STORE540.
+All nine unchanged frozen tests passed again from the packaged runner.
+
 ## Next work
 
 The target still requires a meaningful change to the arithmetic or memory-access graph. Current independent investigations include shorter hash topologies, alternative deep-tree records, and using late memory packing to reduce FLOW pressure. Correctness and cycle claims for kernel changes must continue to be verified using the unmodified `python tests/submission_tests.py` harness before replacing the best implementation.
