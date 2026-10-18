@@ -1,0 +1,600 @@
+{
+  "scope": "H1 != gamma*b0 XOR bit_t(m2*b+C2) XOR constant, all s,t 1..31, gamma 0/1, odd first MAD and arbitrary constant-XOR gauges; even second MAD reduces to odd effective selected bit",
+  "result": "ALL_961_SHIFT_PAIRS_EXCLUDED",
+  "reference": {
+    "verified_core_words": 262144,
+    "counts": [
+      2693,
+      16308,
+      23240,
+      4294,
+      16308,
+      2693
+    ],
+    "low_orbits": 65536,
+    "full_replication": 16384,
+    "influence12": 79096,
+    "full_input31_edges": 1295908864,
+    "constant_or_opposite": 9680
+  },
+  "affine_coordinate": {
+    "checked": 24512,
+    "maximum_width": 8,
+    "formula": "I=H*(d-epsilon)+2*epsilon*W"
+  },
+  "fixed_step": {
+    "checked": 4092,
+    "maximum_modulus": 2048
+  },
+  "union_profiles": {
+    "checked": 65528,
+    "maximum_modulus": 65536
+  },
+  "direct_mixture": {
+    "checked": 33024,
+    "widths": [
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "every_odd_coefficient": true,
+    "bases_per_width": 16,
+    "both_gamma_values": true
+  },
+  "first_parameter_gauges": {
+    "checked": 768,
+    "widths": [
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "parameters": [
+      "m1",
+      "C1",
+      "Ki",
+      "K"
+    ],
+    "full_histogram": true
+  },
+  "s1": {
+    "table": [
+      {
+        "m": 1,
+        "counts": [
+          0,
+          4,
+          4,
+          4,
+          4,
+          0
+        ],
+        "has_constant": false,
+        "has_opposite": true
+      },
+      {
+        "m": 3,
+        "counts": [
+          2,
+          4,
+          4,
+          0,
+          4,
+          2
+        ],
+        "has_constant": true,
+        "has_opposite": false
+      },
+      {
+        "m": 5,
+        "counts": [
+          2,
+          4,
+          4,
+          0,
+          4,
+          2
+        ],
+        "has_constant": true,
+        "has_opposite": false
+      },
+      {
+        "m": 7,
+        "counts": [
+          0,
+          4,
+          4,
+          4,
+          4,
+          0
+        ],
+        "has_constant": false,
+        "has_opposite": true
+      }
+    ],
+    "checked": 64
+  },
+  "s3": {
+    "rows": [
+      {
+        "m": 3,
+        "maximum": 2,
+        "profiles": [
+          [
+            2,
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            2,
+            1
+          ],
+          [
+            0,
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            0,
+            2
+          ],
+          [
+            2,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            2,
+            0,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      {
+        "m": 13,
+        "maximum": 2,
+        "profiles": [
+          [
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            0,
+            2
+          ],
+          [
+            2,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            2,
+            0,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            2,
+            1
+          ],
+          [
+            0,
+            1,
+            1,
+            2
+          ]
+        ]
+      }
+    ],
+    "maximum_union_fraction": [
+      1,
+      8
+    ]
+  },
+  "s4": {
+    "rows": [
+      {
+        "m": 7,
+        "values": [
+          7,
+          6,
+          7,
+          8,
+          7,
+          6,
+          7,
+          8,
+          7,
+          8,
+          9,
+          8,
+          7,
+          8,
+          9,
+          8,
+          9,
+          10,
+          9,
+          8,
+          9,
+          10,
+          9,
+          8,
+          9,
+          8,
+          7,
+          8,
+          9,
+          8,
+          7,
+          8
+        ],
+        "minimum": 6,
+        "maximum": 10
+      },
+      {
+        "m": 25,
+        "values": [
+          8,
+          9,
+          8,
+          7,
+          8,
+          9,
+          8,
+          7,
+          8,
+          7,
+          6,
+          7,
+          8,
+          7,
+          6,
+          7,
+          8,
+          7,
+          8,
+          9,
+          8,
+          7,
+          8,
+          9,
+          8,
+          9,
+          10,
+          9,
+          8,
+          9,
+          10,
+          9
+        ],
+        "minimum": 6,
+        "maximum": 10
+      }
+    ],
+    "required_fractions": [
+      [
+        353,
+        2048
+      ],
+      [
+        1695,
+        2048
+      ]
+    ],
+    "allowed_fraction": [
+      0.375,
+      0.625
+    ]
+  },
+  "s31": {
+    "checked": 174720,
+    "maximum_width": 8,
+    "full_Q": 1073741824,
+    "gamma_one_distances": [
+      1295908863,
+      1295908865
+    ],
+    "gamma_zero_distances": [
+      851574783,
+      851574785
+    ]
+  },
+  "top_bounds": {
+    "target_fraction": [
+      605,
+      4096
+    ],
+    "worst_generic_bound": [
+      4643,
+      32768
+    ],
+    "table": [
+      {
+        "s": 6,
+        "upper_fraction": 0.141693115234375
+      },
+      {
+        "s": 7,
+        "upper_fraction": 0.118255615234375
+      },
+      {
+        "s": 8,
+        "upper_fraction": 0.106536865234375
+      },
+      {
+        "s": 9,
+        "upper_fraction": 0.100677490234375
+      },
+      {
+        "s": 10,
+        "upper_fraction": 0.097747802734375
+      },
+      {
+        "s": 11,
+        "upper_fraction": 0.096282958984375
+      },
+      {
+        "s": 12,
+        "upper_fraction": 0.095550537109375
+      },
+      {
+        "s": 13,
+        "upper_fraction": 0.095184326171875
+      },
+      {
+        "s": 14,
+        "upper_fraction": 0.095001220703125
+      },
+      {
+        "s": 15,
+        "upper_fraction": 0.09490966796875
+      },
+      {
+        "s": 16,
+        "upper_fraction": 0.0948638916015625
+      },
+      {
+        "s": 17,
+        "upper_fraction": 0.09484100341796875
+      },
+      {
+        "s": 18,
+        "upper_fraction": 0.09482955932617188
+      },
+      {
+        "s": 19,
+        "upper_fraction": 0.09482383728027344
+      },
+      {
+        "s": 20,
+        "upper_fraction": 0.09482097625732422
+      },
+      {
+        "s": 21,
+        "upper_fraction": 0.09481954574584961
+      },
+      {
+        "s": 22,
+        "upper_fraction": 0.0948188304901123
+      },
+      {
+        "s": 23,
+        "upper_fraction": 0.09481847286224365
+      },
+      {
+        "s": 24,
+        "upper_fraction": 0.09481829404830933
+      },
+      {
+        "s": 25,
+        "upper_fraction": 0.09481820464134216
+      },
+      {
+        "s": 26,
+        "upper_fraction": 0.09481815993785858
+      },
+      {
+        "s": 27,
+        "upper_fraction": 0.09481813758611679
+      },
+      {
+        "s": 28,
+        "upper_fraction": 0.0948181264102459
+      },
+      {
+        "s": 29,
+        "upper_fraction": 0.09481812082231045
+      },
+      {
+        "s": 30,
+        "upper_fraction": 0.09481811802834272
+      }
+    ],
+    "s2_maximum_union": 0,
+    "s3_maximum_union_fraction": [
+      1,
+      8
+    ],
+    "s5_profile": [
+      2,
+      4,
+      4,
+      4
+    ],
+    "s5_maximum_union_fraction": [
+      1,
+      8
+    ]
+  },
+  "forbidden_simplification_counterexample": {
+    "n": 5,
+    "s": 2,
+    "t": 4,
+    "m": 3,
+    "C": 3,
+    "orbits": [
+      {
+        "A": 1,
+        "bits": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "class": 5
+      },
+      {
+        "A": 2,
+        "bits": [
+          0,
+          1,
+          0,
+          1
+        ],
+        "class": 3
+      }
+    ]
+  }
+}

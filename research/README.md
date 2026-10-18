@@ -44,6 +44,24 @@ C1-deleted core allowed to reuse live prefix words. Their conclusions are
 scoped family exclusions, with direct synthesis timeouts explicitly retained.
 The best executable kernel is still865 cycles.
 
+Two additional reproducible certificates are retained in
+`hash/raw_node_coordinates/` and `hash/two_shear_quarter/`. The first records
+full-domain stratified coefficients and an independent finite verifier for
+251 output-component cases under the stated raw-node-commuting encodings.
+The second excludes all 961 constant-shift pairs in its stated two-MAD,
+two-right-shear, free-branch topology. Their notes define the exact scope;
+neither is a global lower bound or a faster kernel. The native lightweight
+collector, component verifier, and quarter-profile verifier were rerun after
+restoring the exact checkpoint files on 2026-10-18 and passed.
+
+```bash
+cd research/hash/raw_node_coordinates
+node raw_tag_all_coordinate_moments.mjs
+node stratified_components.js
+cd ../two_shear_quarter
+node all_shift_quarter_verify.js
+```
+
 ## Next work
 
 The target still requires a meaningful change to the arithmetic or memory-access graph. Current independent investigations include shorter hash topologies, alternative deep-tree records, and using late memory packing to reduce FLOW pressure. Correctness and cycle claims for kernel changes must continue to be verified using the unmodified `python tests/submission_tests.py` harness before replacing the best implementation.

@@ -1,0 +1,30 @@
+{
+  "title": "Exact all-coordinate raw-node-commuting affine-derivative certificate",
+  "kernelImprovement": false,
+  "expectedParentCycles": 865,
+  "finiteCheck": "node stratified_components.js",
+  "fullEvidenceOutput": "node stratified_components.js full_result.json",
+  "fullCollector": "Companion kernel-math checkpoint, full32 domain",
+  "files": [
+    {
+      "path": "stratified_components.js",
+      "characters": 18836
+    },
+    {
+      "path": "stratified_component_moments.json",
+      "characters": 3400
+    },
+    {
+      "path": "stratified_component_certificate.json",
+      "characters": 11238
+    },
+    {
+      "path": "stratified_component_verification.json",
+      "characters": 1224
+    },
+    {
+      "path": "stratified_component_results.md",
+      "characters": 11295
+    }
+  ]
+}

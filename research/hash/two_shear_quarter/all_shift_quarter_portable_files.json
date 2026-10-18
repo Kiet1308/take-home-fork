@@ -1,0 +1,47 @@
+{
+  "name": "all_shift_quarter_portable_files",
+  "result": "ALL_961_SHIFT_PAIRS_EXCLUDED",
+  "files": [
+    {
+      "name": "all_shift_quarter_exclusion.md",
+      "bytes": 14830,
+      "git_blob_sha1": "4355a408f58d3916e9a0c4e876e250f6f2826ecc"
+    },
+    {
+      "name": "all_shift_quarter_verify.js",
+      "bytes": 10238,
+      "git_blob_sha1": "26140526b4f3b4e319b3b97095fd8ba9657ed293"
+    },
+    {
+      "name": "all_shift_quarter_results.json",
+      "bytes": 9310,
+      "git_blob_sha1": "53f4694a31dbf4af5a40631ebe1e09e1c906609f"
+    },
+    {
+      "name": "all_shift_quarter.log",
+      "bytes": 773,
+      "git_blob_sha1": "89a23a6b2c94e48f6cdcf8b52594e29c81fb21f3"
+    },
+    {
+      "name": "all_shift_influence_notes.md",
+      "bytes": 4610,
+      "git_blob_sha1": "c0ed6d7d277fc944c1ce30cc88c6d5c17120451a"
+    },
+    {
+      "name": "all_shift_influence.js",
+      "bytes": 6295,
+      "git_blob_sha1": "37a38a6afcc655408ca3cf9d573f735ce2668c13"
+    },
+    {
+      "name": "all_shift_influence_results.json",
+      "bytes": 235970,
+      "git_blob_sha1": "405ea38ec542eeb78285fc071aa9fcbebfeb54bb"
+    },
+    {
+      "name": "all_shift_influence.log",
+      "bytes": 535,
+      "git_blob_sha1": "d00d346c53711f521feefe0716e8c6a94f7add6d"
+    }
+  ],
+  "total_bytes": 282561
+}

@@ -1,0 +1,8 @@
+Gamma=1 input31 necessary-condition classification only.
+EXCLUDED: 818. PASSES_INFLUENCE: 143. UNRESOLVED: 0.
+Every passing row has an explicit odd m2/C2 witness, independently verified by exact BigInt floor sums.
+Circular profile windows: 97052; maximum modulus: 16384.
+Every profile checked by both prefix-window sums and a modular-inverse recurrence.
+t=31 survivors: s=1,2,3,14,23,24,25,26,27,28,29,30,31.
+All 961 pairs are subsequently excluded by the independent quarter-orbit theorem.
+Reproduce with: node all_shift_influence.js

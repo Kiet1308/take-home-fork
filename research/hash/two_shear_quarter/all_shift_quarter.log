@@ -1,0 +1,11 @@
+ALL_961_SHIFT_PAIRS_EXCLUDED
+Execution: fresh pure-JavaScript functions.exec isolate; local exec-server transport unavailable.
+Runtime observed: 5.1 seconds.
+Reference core comparisons: 262144; reference I12: 79096; full input31 edges: 1295908864.
+Quarter histogram: [2693,16308,23240,4294,16308,2693]; constant-or-opposite fraction: 605/4096.
+Affine formula checks: 24512. Fixed-step checks: 4092. Union profiles: 65528.
+Direct mixture checks, both gamma values: 33024. Full first-parameter/gauge histogram checks: 768.
+s1 endpoint cases: 64. Final endpoint cases: 174720.
+Generic top-shift bound at s>=6: at most 4643/32768 < 4840/32768.
+All checks passed. No positive full hash candidate or cycle improvement is claimed.
+Reproduce with: node all_shift_quarter_verify.js
