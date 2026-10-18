@@ -1,0 +1,25 @@
+{
+  "cycles": 866,
+  "weighted": 51697,
+  "counts": {
+    "alu": 10297,
+    "valu": 5175,
+    "load": 1682,
+    "flow": 850,
+    "store": 474
+  },
+  "params": {
+    "HASH_GAUGE": 0,
+    "HC_PATTERN_WORDS": [
+      4,
+      4
+    ],
+    "HC_MASK_OVERLAP": 1,
+    "HC_KEEP_33": 0,
+    "HC_NINE_PAIR": 0,
+    "HC_FLOW": {
+      "2899272192": 3,
+      "4251993797": 4
+    }
+  }
+}
