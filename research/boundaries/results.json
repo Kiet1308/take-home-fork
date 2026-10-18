@@ -1,0 +1,13 @@
+{
+  "baseline": {
+    "cycles": 865,
+    "scratch": 1370,
+    "weight": 51704
+  },
+  "delay_r8": {
+    "cycles": 866,
+    "scratch": 1370,
+    "weight": 51704,
+    "scope": "Move the round8 decode into the round9 gather input and invert the outer pointer select; exact operation count unchanged."
+  }
+}

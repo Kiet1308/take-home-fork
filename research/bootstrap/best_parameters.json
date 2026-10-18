@@ -1,0 +1,20 @@
+{
+  "BOOT_COMBO": "1",
+  "COMBO_DERIVE_4097": "1",
+  "COMBO_SINGLE_C1": "1",
+  "COMBO_RAW_C4": "0",
+  "COMBO_INPUT_POWERS": "1",
+  "HC_KEEP_33": "0",
+  "HC_PATTERN_WORDS": [
+    0,
+    2
+  ],
+  "HC_NINE_PAIR": "0",
+  "HC_FLOW": {
+    "0xaccf6200": 4,
+    "0xfd7046c5": 5
+  },
+  "HC_C1_CYCLE": "1",
+  "HC_INTERLEAVED": "1",
+  "HASH_GAUGE": "0"
+}

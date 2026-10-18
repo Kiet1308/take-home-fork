@@ -1,0 +1,43 @@
+{
+  "status": "layout and local zero-copy preparation verified",
+  "records": {
+    "depth2": 4,
+    "depth5": 32,
+    "depth8": 256
+  },
+  "payload_words": 2080,
+  "memory_words": 2566,
+  "highest_meaningful_word": 2558,
+  "highest_vload_word": 2559,
+  "staging_addresses": [
+    88,
+    488,
+    888,
+    1288
+  ],
+  "preparation_records_checked": 256,
+  "deep_preparation": {
+    "LOAD": 320,
+    "STORE": 256,
+    "encoded_root_XOR": 256,
+    "raw_copy_ALU": 0
+  },
+  "ideal_walk": {
+    "pointer_weighted": 512,
+    "pointer_savings_vs_baseline": 1024,
+    "FLOW": 896,
+    "record_LOAD": 1024
+  },
+  "blockers": [
+    "896 ideal walk FLOW already exceeds the 849-cycle target before setup.",
+    "The ideal FLOW assumes four fully transposed grandchild vectors.",
+    "The best concrete local grandchild packing found costs six FLOW, eight STORE, and two LOAD before preserving or selecting children.",
+    "The local preparation proof does not yet schedule global in-place source/destination hazards under the 1536-word scratch limit.",
+    "Preparation counts exclude pointer-constant materialization and the already-required first-511-node reads."
+  ],
+  "frozen_isa_preparation": {
+    "records_checked": 256,
+    "scratch_highest_used_word": 47,
+    "simulator": "/workspace/scratch/157fa713c5b2/research-checkpoint/tests/frozen_problem.py"
+  }
+}

@@ -1,0 +1,632 @@
+[
+  {
+    "params": {
+      "COMBO_FLOW_4097": "1",
+      "COMBO_DERIVE_4097": "0",
+      "COMBO_SINGLE_C1": "0",
+      "HC_INTERLEAVED": "0",
+      "COMBO_NATIVE_A": "0"
+    },
+    "cycles": 867,
+    "scratch": 1332,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5177,
+      "alu": 10284,
+      "store": 474
+    },
+    "weight": 51700,
+    "early_weight": [
+      8,
+      44,
+      52,
+      44,
+      52,
+      60,
+      60,
+      52,
+      60,
+      60,
+      60,
+      60
+    ],
+    "prefix_deficit16": 108,
+    "first_hash": {
+      "^": [
+        2,
+        4,
+        5,
+        10,
+        13
+      ],
+      "multiply_add": [
+        3,
+        8,
+        9,
+        11
+      ],
+      ">>": [
+        4,
+        12
+      ],
+      "%": [
+        14
+      ],
+      "vstore": [
+        34,
+        34,
+        35,
+        35,
+        36,
+        36,
+        37,
+        37,
+        38,
+        38,
+        39,
+        39,
+        40,
+        40,
+        41,
+        41,
+        42,
+        42,
+        43,
+        44,
+        45,
+        51,
+        52,
+        53,
+        54,
+        54
+      ]
+    },
+    "correct": true,
+    "machine_cycles": 867
+  },
+  {
+    "params": {
+      "COMBO_FLOW_4097": "1",
+      "COMBO_DERIVE_4097": "0",
+      "COMBO_SINGLE_C1": "0",
+      "HC_INTERLEAVED": "0",
+      "COMBO_NATIVE_A": "1"
+    },
+    "cycles": 867,
+    "scratch": 1359,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5179,
+      "alu": 10280,
+      "store": 466
+    },
+    "weight": 51712,
+    "early_weight": [
+      8,
+      44,
+      52,
+      52,
+      52,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60
+    ],
+    "prefix_deficit16": 92,
+    "first_hash": {
+      "^": [
+        2,
+        4,
+        5,
+        9,
+        12
+      ],
+      "multiply_add": [
+        3,
+        6,
+        8,
+        10
+      ],
+      ">>": [
+        4,
+        11
+      ],
+      "%": [
+        13
+      ],
+      "vstore": [
+        35,
+        35,
+        36,
+        36,
+        37,
+        37,
+        38,
+        38,
+        39,
+        39,
+        40,
+        41,
+        42,
+        48,
+        49,
+        50,
+        51,
+        51,
+        52,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "correct": true,
+    "machine_cycles": 867
+  },
+  {
+    "params": {
+      "COMBO_FLOW_4097": "1",
+      "COMBO_DERIVE_4097": "0",
+      "COMBO_SINGLE_C1": "0",
+      "HC_INTERLEAVED": "0",
+      "COMBO_NATIVE_A": "2"
+    },
+    "cycles": 867,
+    "scratch": 1369,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5176,
+      "alu": 10301,
+      "store": 466
+    },
+    "weight": 51709,
+    "early_weight": [
+      8,
+      44,
+      52,
+      44,
+      52,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60
+    ],
+    "prefix_deficit16": 100,
+    "first_hash": {
+      "^": [
+        2,
+        4,
+        5,
+        9,
+        12
+      ],
+      "multiply_add": [
+        3,
+        6,
+        8,
+        10
+      ],
+      ">>": [
+        4,
+        11
+      ],
+      "%": [
+        13
+      ],
+      "vstore": [
+        35,
+        35,
+        36,
+        36,
+        37,
+        37,
+        38,
+        38,
+        39,
+        39,
+        40,
+        41,
+        42,
+        48,
+        49,
+        50,
+        51,
+        51,
+        52,
+        52,
+        53,
+        53,
+        54,
+        55,
+        56,
+        57
+      ]
+    },
+    "correct": true,
+    "machine_cycles": 867
+  },
+  {
+    "params": {
+      "COMBO_FLOW_4097": "1",
+      "COMBO_DERIVE_4097": "0",
+      "COMBO_SINGLE_C1": "0",
+      "HC_PATTERN_WORDS": [
+        0,
+        0
+      ],
+      "HC_NINE_PAIR": "0",
+      "HC_FLOW": {
+        "0xaccf6200": 3,
+        "0xfd7046c5": 4
+      }
+    },
+    "cycles": 867,
+    "scratch": 1336,
+    "counts": {
+      "load": 1681,
+      "flow": 850,
+      "valu": 5179,
+      "alu": 10266,
+      "store": 466
+    },
+    "weight": 51698,
+    "early_weight": [
+      8,
+      44,
+      44,
+      44,
+      52,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60
+    ],
+    "prefix_deficit16": 108,
+    "first_hash": {
+      "^": [
+        2,
+        4,
+        5,
+        7,
+        10
+      ],
+      "multiply_add": [
+        3,
+        6,
+        6,
+        8
+      ],
+      ">>": [
+        4,
+        9
+      ],
+      "%": [
+        11
+      ],
+      "vstore": [
+        35,
+        35,
+        36,
+        36,
+        37,
+        37,
+        38,
+        38,
+        39,
+        39,
+        40,
+        41,
+        42,
+        48,
+        49,
+        50,
+        51,
+        51,
+        52,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "correct": true,
+    "machine_cycles": 867
+  },
+  {
+    "params": {
+      "COMBO_FLOW_4097": "1",
+      "COMBO_DERIVE_4097": "0",
+      "COMBO_SINGLE_C1": "0",
+      "HC_PATTERN_WORDS": [
+        0,
+        2
+      ],
+      "HC_NINE_PAIR": "0",
+      "HC_FLOW": {
+        "0xaccf6200": 3,
+        "0xfd7046c5": 4
+      }
+    },
+    "cycles": 867,
+    "scratch": 1378,
+    "counts": {
+      "load": 1682,
+      "flow": 850,
+      "valu": 5174,
+      "alu": 10305,
+      "store": 468
+    },
+    "weight": 51697,
+    "early_weight": [
+      8,
+      44,
+      44,
+      44,
+      52,
+      60,
+      52,
+      60,
+      60,
+      60,
+      60,
+      60
+    ],
+    "prefix_deficit16": 116,
+    "first_hash": {
+      "^": [
+        2,
+        4,
+        5,
+        8,
+        11
+      ],
+      "multiply_add": [
+        3,
+        7,
+        7,
+        9
+      ],
+      ">>": [
+        4,
+        10
+      ],
+      "%": [
+        12
+      ],
+      "vstore": [
+        36,
+        36,
+        37,
+        37,
+        38,
+        38,
+        39,
+        39,
+        40,
+        40,
+        41,
+        42,
+        43,
+        49,
+        50,
+        51,
+        52,
+        52,
+        53,
+        53,
+        54,
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "correct": true,
+    "machine_cycles": 867
+  },
+  {
+    "params": {
+      "COMBO_FLOW_4097": "1",
+      "COMBO_DERIVE_4097": "0",
+      "COMBO_SINGLE_C1": "0",
+      "HC_PATTERN_WORDS": [
+        4,
+        4
+      ],
+      "HC_NINE_PAIR": "0",
+      "HC_FLOW": {
+        "0xaccf6200": 3,
+        "0xfd7046c5": 4
+      }
+    },
+    "cycles": 868,
+    "scratch": 1384,
+    "counts": {
+      "load": 1683,
+      "flow": 850,
+      "valu": 5180,
+      "alu": 10252,
+      "store": 474
+    },
+    "weight": 51692,
+    "early_weight": [
+      8,
+      44,
+      44,
+      44,
+      52,
+      60,
+      52,
+      44,
+      52,
+      60,
+      60,
+      60
+    ],
+    "prefix_deficit16": 140,
+    "first_hash": {
+      "^": [
+        2,
+        4,
+        5,
+        11,
+        14
+      ],
+      "multiply_add": [
+        3,
+        10,
+        10,
+        12
+      ],
+      ">>": [
+        4,
+        13
+      ],
+      "%": [
+        15
+      ],
+      "vstore": [
+        36,
+        36,
+        37,
+        37,
+        38,
+        38,
+        39,
+        39,
+        40,
+        40,
+        41,
+        41,
+        42,
+        43,
+        44,
+        50,
+        51,
+        52,
+        53,
+        53,
+        54,
+        54,
+        55,
+        55,
+        56,
+        57
+      ]
+    },
+    "correct": true,
+    "machine_cycles": 868
+  },
+  {
+    "params": {
+      "COMBO_FLOW_4097": "1",
+      "COMBO_DERIVE_4097": "0",
+      "COMBO_SINGLE_C1": "0",
+      "HC_PATTERN_WORDS": [
+        8,
+        8
+      ],
+      "HC_NINE_PAIR": "0",
+      "HC_FLOW": {
+        "0xaccf6200": 3,
+        "0xfd7046c5": 4
+      }
+    },
+    "cycles": 868,
+    "scratch": 1348,
+    "counts": {
+      "load": 1683,
+      "flow": 850,
+      "valu": 5176,
+      "alu": 10276,
+      "store": 482
+    },
+    "weight": 51684,
+    "early_weight": [
+      8,
+      44,
+      44,
+      44,
+      52,
+      60,
+      52,
+      44,
+      60,
+      60,
+      60,
+      60
+    ],
+    "prefix_deficit16": 132,
+    "first_hash": {
+      "^": [
+        2,
+        4,
+        5,
+        14,
+        17
+      ],
+      "multiply_add": [
+        3,
+        13,
+        13,
+        15
+      ],
+      ">>": [
+        4,
+        16
+      ],
+      "%": [
+        18
+      ],
+      "vstore": [
+        40,
+        40,
+        41,
+        41,
+        42,
+        42,
+        43,
+        43,
+        44,
+        44,
+        45,
+        46,
+        47,
+        53,
+        54,
+        55,
+        56,
+        56,
+        57,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ]
+    },
+    "correct": true,
+    "machine_cycles": 868
+  }
+]

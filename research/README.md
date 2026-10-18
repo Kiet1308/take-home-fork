@@ -62,6 +62,29 @@ cd ../two_shear_quarter
 node all_shift_quarter_verify.js
 ```
 
+## Further complete runtime and layout experiments
+
+`bootstrap/` retains the C0 mask and early-constant experiments. Its best
+candidate passes all nine frozen tests at866 cycles, with51704 arithmetic
+equivalents and the baseline1680 LOAD /849 FLOW totals. All61 measured
+configurations were correct; none improves main. The checkpoint runner
+uses the unchanged repository tests and passed again after packaging.
+
+`boundaries/` records eight constant gauges and a round8 decode
+reassociation. The gauges passed1028 independent hash-identity checks each
+and compiled to865 or866 cycles; the reassociation compiled to866 with no
+arithmetic reduction. No full frozen-suite pass is claimed for these
+unpromoted variants.
+
+`triple_records/` proves a complete in-bounds layout for depth2/5/8 triples
+and executes a local deep-record preparation sequence on the frozen ISA.
+All256 deepest records pass. Processing child pairs backward lets one
+grandchild vload overwrite only consumed fields, avoiding raw-data ALU
+copies. The resource audit still requires896 ideal walk FLOW instructions
+before setup or practical grandchild packing, so this is not a faster
+complete kernel. Global in-place preparation hazards and its address
+materialization costs are explicitly outside the local verification.
+
 ## Next work
 
 The target still requires a meaningful change to the arithmetic or memory-access graph. Current independent investigations include shorter hash topologies, alternative deep-tree records, and using late memory packing to reduce FLOW pressure. Correctness and cycle claims for kernel changes must continue to be verified using the unmodified `python tests/submission_tests.py` harness before replacing the best implementation.

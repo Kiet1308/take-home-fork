@@ -1,0 +1,43 @@
+{
+  "all_passed": true,
+  "checked": 41184,
+  "gaugeChecked": 1120,
+  "byWidth": [
+    {
+      "width": 4,
+      "cases": 128
+    },
+    {
+      "width": 5,
+      "cases": 1024
+    },
+    {
+      "width": 6,
+      "cases": 6144
+    },
+    {
+      "width": 7,
+      "cases": 32768
+    },
+    {
+      "width": 8,
+      "cases": 160
+    },
+    {
+      "width": 9,
+      "cases": 192
+    },
+    {
+      "width": 10,
+      "cases": 224
+    },
+    {
+      "width": 11,
+      "cases": 256
+    },
+    {
+      "width": 12,
+      "cases": 288
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+[
+  {
+    "name": "identity",
+    "cycles": 865,
+    "scratch": 1370,
+    "weight": 51704,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5172,
+      "alu": 10328,
+      "store": 474
+    },
+    "hash_checks": 1028
+  },
+  {
+    "name": "identity_msb",
+    "cycles": 865,
+    "scratch": 1370,
+    "weight": 51704,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5172,
+      "alu": 10328,
+      "store": 474
+    },
+    "hash_checks": 1028
+  },
+  {
+    "name": "both_branches_complement",
+    "cycles": 865,
+    "scratch": 1371,
+    "weight": 51704,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5172,
+      "alu": 10328,
+      "store": 474
+    },
+    "hash_checks": 1028
+  },
+  {
+    "name": "both_branches_complement_msb",
+    "cycles": 865,
+    "scratch": 1371,
+    "weight": 51704,
+    "counts": {
+      "load": 1680,
+      "flow": 849,
+      "valu": 5172,
+      "alu": 10328,
+      "store": 474
+    },
+    "hash_checks": 1028
+  },
+  {
+    "name": "v_branch_complement",
+    "cycles": 866,
+    "scratch": 1407,
+    "weight": 51703,
+    "counts": {
+      "load": 1681,
+      "flow": 849,
+      "valu": 5175,
+      "alu": 10303,
+      "store": 474
+    },
+    "hash_checks": 1028
+  },
+  {
+    "name": "v_branch_complement_msb",
+    "cycles": 866,
+    "scratch": 1407,
+    "weight": 51703,
+    "counts": {
+      "load": 1681,
+      "flow": 849,
+      "valu": 5175,
+      "alu": 10303,
+      "store": 474
+    },
+    "hash_checks": 1028
+  },
+  {
+    "name": "u_branch_complement",
+    "cycles": 866,
+    "scratch": 1408,
+    "weight": 51703,
+    "counts": {
+      "load": 1681,
+      "flow": 849,
+      "valu": 5175,
+      "alu": 10303,
+      "store": 474
+    },
+    "hash_checks": 1028
+  },
+  {
+    "name": "u_branch_complement_msb",
+    "cycles": 866,
+    "scratch": 1408,
+    "weight": 51703,
+    "counts": {
+      "load": 1681,
+      "flow": 849,
+      "valu": 5175,
+      "alu": 10303,
+      "store": 474
+    },
+    "hash_checks": 1028
+  }
+]
