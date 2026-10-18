@@ -1,0 +1,112 @@
+Exact alternative-tail coordinate counts: {4: [1084293192, 1120102356, 1063236648], 8: [113174656, 76492140, 71658924]}
+source 0 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 0 excluded by exact counts (31, 4, 0)
+source 0 excluded by exact counts (27, 8, 0)
+source 1 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 1 excluded by exact counts (31, 4, 0)
+source 1 excluded by exact counts (27, 8, 0)
+source 2 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 2 excluded by exact counts (31, 4, 0)
+source 2 excluded by exact counts (27, 8, 0)
+source 3 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 3 excluded by exact counts (31, 4, 0)
+source 3 excluded by exact counts (27, 8, 0)
+source 4 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 4 excluded by exact counts (31, 4, 0)
+source 4 excluded by exact counts (27, 8, 0)
+source 5 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 5 excluded by exact counts (31, 4, 0)
+source 5 excluded by exact counts (27, 8, 0)
+source 6 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 6 excluded by exact counts (31, 4, 0)
+source 6 excluded by exact counts (27, 8, 0)
+source 7 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 7 excluded by exact counts (31, 4, 0)
+source 7 excluded by exact counts (27, 8, 0)
+source 8 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 8 excluded by exact counts (31, 4, 0)
+source 8 excluded by exact counts (27, 8, 0)
+source 9 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 9 excluded by exact counts (31, 4, 0)
+source 9 excluded by exact counts (27, 8, 0)
+source 10 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 10 excluded by exact counts (31, 4, 0)
+source 10 excluded by exact counts (27, 8, 0)
+source 11 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 11 excluded by exact counts (31, 4, 0)
+source 11 excluded by exact counts (27, 8, 0)
+source 12 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 12 excluded by exact counts (31, 4, 0)
+source 12 excluded by exact counts (27, 8, 0)
+source 13 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 13 excluded by exact counts (31, 4, 0)
+source 13 excluded by exact counts (27, 8, 0)
+source 14 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 14 excluded by exact counts (31, 4, 0)
+source 14 excluded by exact counts (27, 8, 0)
+source 15 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 15 excluded by exact counts (31, 4, 0)
+source 15 excluded by exact counts (27, 8, 0)
+source 16 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 16 excluded by exact counts (31, 4, 0)
+source 16 excluded by exact counts (27, 8, 0)
+source 17 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 17 excluded by exact counts (31, 4, 0)
+source 17 excluded by exact counts (27, 8, 0)
+source 18 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 18 excluded by exact counts (31, 4, 0)
+source 18 excluded by exact counts (27, 8, 0)
+source 19 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0)]
+source 19 excluded by exact counts (31, 4, 0)
+source 19 excluded by exact counts (27, 8, 0)
+source 20 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (20, 16, 0)]
+source 20 excluded by exact counts (31, 4, 0)
+source 20 excluded by exact counts (27, 8, 0)
+source 20 excluded by exact counts (20, 16, 0)
+source 21 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (21, 16, 0)]
+source 21 excluded by exact counts (31, 4, 0)
+source 21 excluded by exact counts (27, 8, 0)
+source 21 excluded by exact counts (21, 16, 0)
+source 22 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (22, 16, 0)]
+source 22 excluded by exact counts (31, 4, 0)
+source 22 excluded by exact counts (27, 8, 0)
+source 22 excluded by exact counts (22, 16, 0)
+source 23 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (23, 16, 0)]
+source 23 excluded by exact counts (31, 4, 0)
+source 23 excluded by exact counts (27, 8, 0)
+source 23 excluded by exact counts (23, 16, 0)
+source 24 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (24, 16, 0)]
+source 24 excluded by exact counts (31, 4, 0)
+source 24 excluded by exact counts (27, 8, 0)
+source 24 excluded by exact counts (24, 16, 0)
+source 25 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (25, 16, 0)]
+source 25 excluded by exact counts (31, 4, 0)
+source 25 excluded by exact counts (27, 8, 0)
+source 25 excluded by exact counts (25, 16, 0)
+source 26 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (26, 16, 0)]
+source 26 excluded by exact counts (31, 4, 0)
+source 26 excluded by exact counts (27, 8, 0)
+source 26 excluded by exact counts (26, 16, 0)
+source 27 derivative survivors [(31, 4, 0), (27, 8, 0), (19, 16, 0), (27, 16, 0)]
+source 27 excluded by exact counts (31, 4, 0)
+source 27 excluded by exact counts (27, 8, 0)
+source 27 excluded by exact counts (27, 16, 0)
+source 28 derivative survivors [(31, 4, 0), (27, 8, 0), (28, 8, 0), (19, 16, 0), (28, 16, 0)]
+source 28 excluded by exact counts (31, 4, 0)
+source 28 excluded by exact counts (27, 8, 0)
+source 28 excluded by exact counts (28, 8, 0)
+source 28 excluded by exact counts (28, 16, 0)
+source 29 derivative survivors [(31, 4, 0), (27, 8, 0), (29, 8, 0), (19, 16, 0), (29, 16, 0)]
+source 29 excluded by exact counts (31, 4, 0)
+source 29 excluded by exact counts (27, 8, 0)
+source 29 excluded by exact counts (29, 8, 0)
+source 29 excluded by exact counts (29, 16, 0)
+source 30 derivative survivors [(31, 4, 0), (27, 8, 0), (30, 8, 0), (19, 16, 0), (30, 16, 0)]
+source 30 excluded by exact counts (31, 4, 0)
+source 30 excluded by exact counts (27, 8, 0)
+source 30 excluded by exact counts (30, 8, 0)
+source 30 excluded by exact counts (30, 16, 0)
+source 31 derivative survivors [(31, 1, 0), (31, 1, 1), (31, 2, 0), (31, 2, 1), (31, 3, 0), (31, 3, 1), (31, 4, 0), (31, 4, 1), (31, 5, 0), (31, 5, 1), (31, 6, 0), (31, 6, 1), (31, 7, 0), (31, 7, 1), (27, 8, 0), (31, 8, 0), (31, 8, 1), (31, 9, 0), (31, 9, 1), (31, 10, 0), (31, 10, 1), (31, 11, 0), (31, 11, 1), (31, 12, 0), (31, 12, 1), (31, 13, 0), (31, 13, 1), (31, 14, 0), (31, 14, 1), (31, 15, 0), (31, 15, 1), (19, 16, 0), (31, 16, 0), (31, 16, 1), (31, 17, 0), (31, 17, 1), (31, 18, 0), (31, 18, 1), (31, 19, 0), (31, 19, 1), (31, 20, 0), (31, 20, 1), (31, 21, 0), (31, 21, 1), (31, 22, 0), (31, 22, 1), (31, 23, 0), (31, 23, 1), (31, 24, 0), (31, 24, 1), (31, 25, 0), (31, 25, 1), (31, 26, 0), (31, 26, 1), (31, 27, 0), (31, 27, 1), (31, 28, 0), (31, 28, 1), (31, 29, 0), (31, 29, 1), (31, 30, 0), (31, 30, 1), (31, 31, 0), (31, 31, 1), (31, 32, 0)]
+source 31 excluded by exact counts (27, 8, 0)
+source 31 excluded by exact counts (31, 16, 0)
+All nonstandard candidates reduce to source31/first31 prefix checks.

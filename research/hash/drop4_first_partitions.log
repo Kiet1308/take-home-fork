@@ -1,0 +1,9 @@
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 1}, "result": "unsat", "samples": 100, "seconds": 7.776}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 2}, "result": "unsat", "samples": 100, "seconds": 4.855}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 3}, "result": "unsat", "samples": 100, "seconds": 5.042}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 1}, "result": "unsat", "samples": 100, "seconds": 6.787}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 2}, "result": "unsat", "samples": 100, "seconds": 2.26}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 3}, "result": "unsat", "samples": 100, "seconds": 2.644}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 4}, "result": "unsat", "samples": 100, "seconds": 13.983}
+{"kind": "drop4", "combine": "and", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": null, "result": "unsat", "samples": 100, "seconds": 17.359}
+{"kind": "drop4", "combine": "or", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": null, "result": "unsat", "samples": 100, "seconds": 22.074}

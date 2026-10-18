@@ -1,0 +1,44 @@
+1 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+1 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+2 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+2 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+3 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+3 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+4 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+4 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+5 0x2b2ea {'rank': 39, 'offset': 1649266393088, 'directions': [524416, 1649267441664]}
+5 0x55d16 {'rank': 39, 'offset': 0, 'directions': [1099646369920, 1649267441664]}
+6 0x2b2ea {'rank': 39, 'offset': 1649266393088, 'directions': [524416, 1649267441664]}
+6 0x55d16 {'rank': 39, 'offset': 0, 'directions': [1099646369920, 1649267441664]}
+7 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+7 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+8 0x2b2ea {'rank': 39, 'offset': 1649266393088, 'directions': [1099646369920, 1649267441664]}
+8 0x55d16 {'rank': 39, 'offset': 0, 'directions': [524416, 1649267441664]}
+9 0x2b2ea {'rank': 38, 'offset': 1649266393088, 'directions': [524416, 256, 1649267441664]}
+9 0x55d16 {'rank': 38, 'offset': 0, 'directions': [1099646369920, 268435712, 1649267441664]}
+10 0x2b2ea {'rank': 36, 'offset': 1649266393088, 'directions': [1099646369920, 268435712, 536871424, 2147485696, 1649267441664]}
+10 0x55d16 {'rank': 36, 'offset': 0, 'directions': [524416, 256, 512, 2048, 1649267441664]}
+11 0x2b2ea {'rank': 36, 'offset': 1649266393088, 'directions': [1099646369920, 268435712, 536871424, 1073742848, 1649267441664]}
+11 0x2baea incompatible magnitudes
+11 0x55516 incompatible magnitudes
+11 0x55d16 {'rank': 36, 'offset': 0, 'directions': [524416, 256, 512, 1024, 1649267441664]}
+12 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+12 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+13 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+13 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+14 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+14 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+15 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+15 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+16 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+16 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+17 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+17 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+18 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+18 0x6b2ea {'rank': 40, 'offset': 1374389010432, 'directions': [1649267441664]}
+18 0x15d16 {'rank': 40, 'offset': 1374390059008, 'directions': [1649267441664]}
+18 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+19 0x2b2ea {'rank': 40, 'offset': 1649266393088, 'directions': [1649267441664]}
+19 0x55d16 {'rank': 40, 'offset': 0, 'directions': [1649267441664]}
+low20 periods {'rank': 41, 'offset': 0, 'directions': []}
+seconds 35.562909156004025

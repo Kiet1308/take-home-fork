@@ -35,6 +35,15 @@ python core_mask_parity.py --width 12 --m3 free
 
 The other scripts and command options are documented in `verified_results.md`; some synthesis modes may take minutes or return `UNKNOWN`. Scripts use their own deterministic witness samples to disprove instruction identities. They do not inspect or specialize the benchmark's randomized inputs.
 
+Further checkpoints are documented in `hash/new_math_results.md`,
+`hash/r0_initial_domain_results.md`, and `hash/drop4_results.md`. These cover
+bounded floor-divisor experiments, exact ceiling-division prefix exclusions,
+arbitrary parity-preserving rank-one encodings in the stated MAD/shear
+topology, the initial30-bit domain with variable shear amounts, and a
+C1-deleted core allowed to reuse live prefix words. Their conclusions are
+scoped family exclusions, with direct synthesis timeouts explicitly retained.
+The best executable kernel is still865 cycles.
+
 ## Next work
 
 The target still requires a meaningful change to the arithmetic or memory-access graph. Current independent investigations include shorter hash topologies, alternative deep-tree records, and using late memory packing to reduce FLOW pressure. Correctness and cycle claims for kernel changes must continue to be verified using the unmodified `python tests/submission_tests.py` harness before replacing the best implementation.

@@ -1,0 +1,6 @@
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 0, "a3": 0}, "result": "unknown", "samples": 104, "seconds": 120.183}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 0, "a3": 1}, "result": "unsat", "samples": 104, "seconds": 9.82}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 0, "a3": 2}, "result": "unsat", "samples": 104, "seconds": 2.703}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 0, "a3": 3}, "result": "unsat", "samples": 104, "seconds": 2.385}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 0, "a3": 4}, "result": "unsat", "samples": 104, "seconds": 15.329}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 0, "a3": 5}, "result": "unsat", "samples": 104, "seconds": 20.707}

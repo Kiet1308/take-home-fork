@@ -1,0 +1,3 @@
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 1}, "result": "unsat", "samples": 104, "seconds": 3.424}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 2}, "result": "unsat", "samples": 104, "seconds": 2.033}
+{"kind": "drop4", "combine": "xor", "first_free": true, "second_free": true, "dependent": true, "outer_free": true, "fixes": {"co1": 0, "co2": 0, "co3": 3}, "result": "unsat", "samples": 104, "seconds": 2.107}
